@@ -1,0 +1,1297 @@
+-------------------------------------------------
+-- CONFIG
+-------------------------------------------------
+local Config = getgenv().Config or {
+    Team = "Pirates",
+    Settings = {
+        ["Spectator Target"] = false,
+        ["Fly Speed"] = 350,
+        ["Auto PVP"] = true,
+        ["PVP Check Interval"] = 5,
+        ["Safe Mode HP"] = 40,
+        ["Auto Safe Height"] = true,
+        ["Safe Height"] = 500
+    },
+    HuntConfig = {
+        ["Farm Delay"] = 0.22,
+        ["NoClip"] = true,
+        ["Ignore Time"] = 300,
+        ["Auto Ignore Time"] = 180  -- 3 phút tự động bỏ qua
+    }
+}
+
+local FarmDelay = Config.HuntConfig["Farm Delay"]
+local SpectateTarget = Config.Settings and Config.Settings["Spectator Target"]
+local FlySpeed = math.min(Config.Settings and Config.Settings["Fly Speed"] or 350, 350)
+local NoClipEnabled = Config.HuntConfig["NoClip"] ~= false
+local IgnoreTime = Config.HuntConfig["Ignore Time"] or 300
+local AutoIgnoreTime = Config.HuntConfig["Auto Ignore Time"] or 180  -- Mặc định 3 phút
+local AutoPVP = Config.Settings and Config.Settings["Auto PVP"] ~= false
+local PVPCheckInterval = Config.Settings and Config.Settings["PVP Check Interval"] or 5
+local SafeModeHP = Config.Settings and Config.Settings["Safe Mode HP"] or 40
+local AutoSafeHeight = Config.Settings and Config.Settings["Auto Safe Height"] ~= false
+local SafeHeight = Config.Settings and Config.Settings["Safe Height"] or 500
+
+-------------------------------------------------
+-- VARIABLES
+-------------------------------------------------
+local SafeModeActive = false
+local Flying = false
+local CurrentTarget = nil
+local ShouldFly = true
+local FlyConnection = nil
+local NoclipConnection = nil
+local NoclipActive = false
+local PVPEnabled = false
+local LastPVPCheck = 0
+local IgnoredPlayers = {}
+local FailedTargets = {}
+local ChaseStartTime = {}
+local MaxRetries = 3
+local IsAtSafeHeight = false
+local SafeHeightConnection = nil
+local PVPEnabledManually = false
+
+-- Theo dõi thời gian không bắt được mục tiêu
+local ChaseTimeoutTracker = {}  -- Lưu thời gian bắt đầu chase mỗi người chơi
+local LastChaseCheck = tick()
+
+-------------------------------------------------
+-- SERVICES
+-------------------------------------------------
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+
+local player = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+
+-------------------------------------------------
+-- WAIT FOR GAME LOAD
+-------------------------------------------------
+repeat task.wait() until game:IsLoaded()
+
+-------------------------------------------------
+-- LOAD FAST ATTACK
+-------------------------------------------------
+task.spawn(function()
+    task.wait(0)
+    pcall(function()
+        loadstring(game:HttpGet("https://raw.githubusercontent.com/Whitescriptx1208/Scripts/refs/heads/main/FastAttack"))()
+    end)
+end)
+
+-------------------------------------------------
+-- JOIN TEAM
+-------------------------------------------------
+pcall(function()
+    ReplicatedStorage.Remotes.CommF_:InvokeServer("SetTeam", Config.Team)
+end)
+
+-------------------------------------------------
+-- SAVE CONFIG
+-------------------------------------------------
+local function SaveConfig()
+    local newConfig = {
+        Team = Config.Team,
+        Settings = {
+            ["Spectator Target"] = SpectateTarget,
+            ["Fly Speed"] = FlySpeed,
+            ["Auto PVP"] = AutoPVP,
+            ["PVP Check Interval"] = PVPCheckInterval,
+            ["Safe Mode HP"] = SafeModeHP,
+            ["Auto Safe Height"] = AutoSafeHeight,
+            ["Safe Height"] = SafeHeight
+        },
+        HuntConfig = {
+            ["Farm Delay"] = FarmDelay,
+            ["NoClip"] = NoClipEnabled,
+            ["Ignore Time"] = IgnoreTime,
+            ["Auto Ignore Time"] = AutoIgnoreTime
+        }
+    }
+    getgenv().Config = newConfig
+    Config = newConfig
+    print("✅ Config saved!")
+end
+
+-------------------------------------------------
+-- FORMAT NUMBER
+-------------------------------------------------
+local function FormatNumber(n)
+    n = tonumber(n) or 0
+    local s = tostring(n)
+    local k
+    repeat
+        s, k = string.gsub(s, "^(-?%d+)(%d%d%d)", "%1,%2")
+    until k == 0
+    return s
+end
+
+-------------------------------------------------
+-- GET VALID PLAYER COUNT
+-------------------------------------------------
+local function GetValidPlayerCount()
+    local count = 0
+    for _, v in pairs(Players:GetPlayers()) do
+        if v ~= player and v.Character and v.Character:FindFirstChild("HumanoidRootPart") and v.Character:FindFirstChild("Humanoid") then
+            if v.Character.Humanoid.Health > 0 then
+                count = count + 1
+            end
+        end
+    end
+    return count
+end
+
+-------------------------------------------------
+-- IGNORE SYSTEM
+-------------------------------------------------
+local function AddToIgnored(playerToIgnore)
+    if playerToIgnore and playerToIgnore.UserId then
+        IgnoredPlayers[playerToIgnore.UserId] = tick()
+        FailedTargets[playerToIgnore.UserId] = nil
+        ChaseStartTime[playerToIgnore.UserId] = nil
+        ChaseTimeoutTracker[playerToIgnore.UserId] = nil  -- Xóa tracker khi ignore
+        print("⏰ Ignored " .. playerToIgnore.Name .. " for " .. IgnoreTime .. "s")
+    end
+end
+
+local function AddFailedAttempt(playerTarget)
+    if playerTarget and playerTarget.UserId then
+        if not FailedTargets[playerTarget.UserId] then
+            FailedTargets[playerTarget.UserId] = {count = 0, timestamp = tick()}
+        end
+        FailedTargets[playerTarget.UserId].count = FailedTargets[playerTarget.UserId].count + 1
+        FailedTargets[playerTarget.UserId].timestamp = tick()
+        
+        if FailedTargets[playerTarget.UserId].count >= MaxRetries then
+            AddToIgnored(playerTarget)
+        end
+    end
+end
+
+local function IsIgnored(playerToCheck)
+    if not playerToCheck then return false end
+    local userId = playerToCheck.UserId
+    local timestamp = IgnoredPlayers[userId]
+    if timestamp then
+        if tick() - timestamp < IgnoreTime then
+            return true
+        else
+            IgnoredPlayers[userId] = nil
+            return false
+        end
+    end
+    return false
+end
+
+local function StartChaseTimer(playerTarget)
+    if playerTarget and playerTarget.UserId then
+        if not ChaseStartTime[playerTarget.UserId] then
+            ChaseStartTime[playerTarget.UserId] = tick()
+        end
+    end
+end
+
+-- Hàm mới: Bắt đầu theo dõi thời gian chase
+local function StartChaseTimeoutTracker(playerTarget)
+    if playerTarget and playerTarget.UserId then
+        if not ChaseTimeoutTracker[playerTarget.UserId] then
+            ChaseTimeoutTracker[playerTarget.UserId] = tick()
+            print("⏱️ Started tracking " .. playerTarget.Name .. " (will auto-ignore after " .. AutoIgnoreTime .. "s)")
+        end
+    end
+end
+
+-- Hàm mới: Kiểm tra timeout cho tất cả mục tiêu đang chase
+local function CheckChaseTimeout()
+    local currentTime = tick()
+    
+    -- Kiểm tra chase timeout cho từng người chơi
+    for userId, startTime in pairs(ChaseTimeoutTracker) do
+        if currentTime - startTime >= AutoIgnoreTime then
+            local targetPlayer = Players:GetPlayerByUserId(userId)
+            if targetPlayer and not IsIgnored(targetPlayer) then
+                print("⏰ Auto-ignored " .. targetPlayer.Name .. " after " .. AutoIgnoreTime .. "s of chasing")
+                AddToIgnored(targetPlayer)
+                if CurrentTarget and CurrentTarget.UserId == userId then
+                    CleanFly()
+                end
+            end
+            ChaseTimeoutTracker[userId] = nil
+        end
+    end
+    
+    -- Cũng kiểm tra chaseStartTime cũ (giữ lại để tương thích)
+    for userId, startTime in pairs(ChaseStartTime) do
+        if currentTime - startTime >= AutoIgnoreTime then
+            local targetPlayer = Players:GetPlayerByUserId(userId)
+            if targetPlayer and not IsIgnored(targetPlayer) then
+                print("⏰ Auto-ignored " .. targetPlayer.Name)
+                AddToIgnored(targetPlayer)
+                if CurrentTarget and CurrentTarget.UserId == userId then
+                    CleanFly()
+                end
+            end
+            ChaseStartTime[userId] = nil
+        end
+    end
+end
+
+-------------------------------------------------
+-- CLEANUP IGNORE LIST & CHECK TIMEOUT
+-------------------------------------------------
+task.spawn(function()
+    while true do
+        local currentTime = tick()
+        
+        -- Cleanup ignore list
+        for userId, timestamp in pairs(IgnoredPlayers) do
+            if currentTime - timestamp >= IgnoreTime then
+                IgnoredPlayers[userId] = nil
+            end
+        end
+        
+        -- Cleanup failed targets
+        for userId, data in pairs(FailedTargets) do
+            if currentTime - data.timestamp > 30 then
+                FailedTargets[userId] = nil
+            end
+        end
+        
+        -- QUAN TRỌNG: Kiểm tra chase timeout mỗi 5 giây
+        CheckChaseTimeout()
+        
+        task.wait(5)  -- Kiểm tra mỗi 5 giây để phản ứng nhanh hơn
+    end
+end)
+
+-------------------------------------------------
+-- PVP SYSTEM - TỰ ĐỘNG BẬT PVP
+-------------------------------------------------
+local function CheckPVPStatus()
+    pcall(function()
+        local leaderstats = player:FindFirstChild("leaderstats")
+        if leaderstats then
+            local pvpStat = leaderstats:FindFirstChild("PVP") or leaderstats:FindFirstChild("PvP")
+            if pvpStat then
+                PVPEnabled = pvpStat.Value == true or pvpStat.Value == "Enabled"
+                return PVPEnabled
+            end
+        end
+    end)
+    return PVPEnabled
+end
+
+local function EnablePVP()
+    if PVPEnabled then return true end
+    
+    print("⚔️ Enabling PVP...")
+    local methods = {
+        function() ReplicatedStorage.Remotes.CommF_:InvokeServer("EnablePVP") end,
+        function() ReplicatedStorage.Remotes.CommF_:InvokeServer("SetSpawnPoint") task.wait(0.1) ReplicatedStorage.Remotes.CommF_:InvokeServer("EnablePVP") end,
+        function() 
+            local args = {
+                [1] = "EnablePVP"
+            }
+            game:GetService("ReplicatedStorage").Remotes.CommF_:InvokeServer(unpack(args))
+        end
+    }
+    
+    for _, method in pairs(methods) do
+        pcall(method)
+        task.wait(1)
+        if CheckPVPStatus() then
+            PVPEnabled = true
+            PVPEnabledManually = true
+            print("✅ PVP Enabled!")
+            return true
+        end
+    end
+    
+    print("⚠️ Failed to enable PVP, will retry...")
+    return false
+end
+
+-- Tự động bật PVP ngay khi script chạy
+task.spawn(function()
+    task.wait(2)
+    
+    print("🔄 Auto-enabling PVP...")
+    local attempts = 0
+    while not PVPEnabled and attempts < 10 do
+        if EnablePVP() then
+            print("✅ PVP automatically enabled!")
+            break
+        end
+        attempts = attempts + 1
+        task.wait(3)
+    end
+    
+    if not PVPEnabled then
+        print("❌ Could not enable PVP after 10 attempts")
+    end
+end)
+
+local function AutoPVPCheck()
+    if not AutoPVP then return end
+    local currentTime = tick()
+    if currentTime - LastPVPCheck < PVPCheckInterval then return end
+    LastPVPCheck = currentTime
+    
+    if not CheckPVPStatus() then
+        print("⚠️ PVP off, auto-enabling...")
+        EnablePVP()
+    end
+end
+
+-- Kiểm tra PVP định kỳ
+task.spawn(function()
+    while true do
+        task.wait(PVPCheckInterval)
+        pcall(AutoPVPCheck)
+    end
+end)
+
+-------------------------------------------------
+-- NOCLIP SYSTEM
+-------------------------------------------------
+local function EnableNoclip()
+    if NoclipActive then return end
+    NoclipActive = true
+    NoclipConnection = RunService.RenderStepped:Connect(function()
+        if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            for _, v in pairs(player.Character:GetDescendants()) do
+                if v:IsA("BasePart") and v.CanCollide then
+                    v.CanCollide = false
+                end
+            end
+        end
+    end)
+end
+
+local function DisableNoclip()
+    NoclipActive = false
+    if NoclipConnection then
+        NoclipConnection:Disconnect()
+        NoclipConnection = nil
+    end
+    if player.Character then
+        for _, v in pairs(player.Character:GetDescendants()) do
+            if v:IsA("BasePart") then
+                v.CanCollide = true
+            end
+        end
+    end
+end
+
+-------------------------------------------------
+-- FLY SYSTEM
+-------------------------------------------------
+local function CreateFly()
+    local char = player.Character
+    if not char then return nil, nil end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return nil, nil end
+    
+    local humanoid = char:FindFirstChild("Humanoid")
+    if humanoid then
+        humanoid.WalkSpeed = 0
+        humanoid.JumpPower = 0
+        humanoid.AutoRotate = false
+        humanoid.PlatformStand = true
+    end
+    
+    for _, v in pairs(hrp:GetChildren()) do
+        if v:IsA("BodyVelocity") or v:IsA("BodyGyro") or v:IsA("BodyPosition") then
+            v:Destroy()
+        end
+    end
+    
+    local bv = Instance.new("BodyVelocity")
+    bv.MaxForce = Vector3.new(9999999, 9999999, 9999999)
+    bv.Velocity = Vector3.new(0, 0, 0)
+    bv.P = 100000
+    bv.Name = "FlyVelocity"
+    bv.Parent = hrp
+    
+    local bg = Instance.new("BodyGyro")
+    bg.MaxTorque = Vector3.new(9999999, 9999999, 9999999)
+    bg.P = 100000
+    bg.D = 1000
+    bg.CFrame = hrp.CFrame
+    bg.Name = "FlyGyro"
+    bg.Parent = hrp
+    
+    return bv, bg
+end
+
+local function CleanFly()
+    if player.Character then
+        local humanoid = player.Character:FindFirstChild("Humanoid")
+        if humanoid then
+            humanoid.WalkSpeed = 16
+            humanoid.JumpPower = 50
+            humanoid.AutoRotate = true
+            humanoid.PlatformStand = false
+        end
+        
+        local hrp = player.Character:FindFirstChild("HumanoidRootPart")
+        if hrp then
+            for _, v in pairs(hrp:GetChildren()) do
+                if v:IsA("BodyPosition") or v:IsA("BodyVelocity") or v:IsA("BodyGyro") then
+                    v:Destroy()
+                end
+            end
+        end
+    end
+    
+    Flying = false
+    CurrentTarget = nil
+    IsAtSafeHeight = false
+    
+    if FlyConnection then
+        FlyConnection:Disconnect()
+        FlyConnection = nil
+    end
+    
+    if SafeHeightConnection then
+        SafeHeightConnection:Disconnect()
+        SafeHeightConnection = nil
+    end
+end
+
+-------------------------------------------------
+-- FLY TO SAFE HEIGHT - KHÔNG GIỚI HẠN THỜI GIAN
+-------------------------------------------------
+local function FlyToSafeHeightNoPlayers()
+    if not AutoSafeHeight then return end
+    if SafeModeActive then return end
+    if IsAtSafeHeight then return end
+    
+    print("🏔️ No players detected - Flying to safe height indefinitely")
+    IsAtSafeHeight = true
+    CurrentTarget = nil
+    Flying = false
+    
+    local char = player.Character
+    if not char then 
+        IsAtSafeHeight = false
+        return 
+    end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then 
+        IsAtSafeHeight = false
+        return 
+    end
+    
+    if FlyConnection then
+        FlyConnection:Disconnect()
+        FlyConnection = nil
+    end
+    
+    if SafeHeightConnection then
+        SafeHeightConnection:Disconnect()
+        SafeHeightConnection = nil
+    end
+    
+    local bv, bg = CreateFly()
+    if not bv or not bg then 
+        IsAtSafeHeight = false
+        return 
+    end
+    
+    EnableNoclip()
+    
+    local targetY = hrp.Position.Y + SafeHeight
+    local reachedTarget = false
+    
+    -- Luôn giữ ở độ cao an toàn, không giới hạn thời gian
+    SafeHeightConnection = RunService.Heartbeat:Connect(function()
+        if not IsAtSafeHeight then 
+            CleanFly()
+            DisableNoclip()
+            return 
+        end
+        
+        local char = player.Character
+        if not char then 
+            CleanFly()
+            DisableNoclip()
+            return 
+        end
+        
+        local hrp = char:FindFirstChild("HumanoidRootPart")
+        if not hrp then 
+            CleanFly()
+            DisableNoclip()
+            return 
+        end
+        
+        local bv = hrp:FindFirstChild("FlyVelocity")
+        local bg = hrp:FindFirstChild("FlyGyro")
+        
+        if not bv or not bg then
+            bv, bg = CreateFly()
+            if not bv or not bg then return end
+        end
+        
+        if not reachedTarget then
+            local currentY = hrp.Position.Y
+            local heightDiff = targetY - currentY
+            
+            if heightDiff <= 1 then
+                reachedTarget = true
+                bv.Velocity = Vector3.new(0, 0, 0)
+                bg.CFrame = hrp.CFrame
+                print("✅ Reached safe height!")
+            else
+                local speed = math.min(FlySpeed, heightDiff * 2)
+                bv.Velocity = Vector3.new(0, speed, 0)
+                bg.CFrame = CFrame.new(hrp.Position, hrp.Position + Vector3.new(0, 1, 0))
+            end
+        else
+            local currentY = hrp.Position.Y
+            local drift = targetY - currentY
+            
+            if math.abs(drift) > 5 then
+                bv.Velocity = Vector3.new(0, math.clamp(drift * 2, -50, 50), 0)
+            else
+                bv.Velocity = Vector3.new(0, 0, 0)
+            end
+            
+            bg.CFrame = CFrame.new(hrp.Position, hrp.Position + Vector3.new(0, 1, 0))
+        end
+    end)
+end
+
+-------------------------------------------------
+-- SAFE MODE SYSTEM
+-------------------------------------------------
+local function FlyToSafeHeight()
+    print("🆘 LOW HP - Safe mode activated!")
+    SafeModeActive = true
+    CurrentTarget = nil
+    Flying = false
+    IsAtSafeHeight = false
+    
+    local char = player.Character
+    if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+    
+    if FlyConnection then
+        FlyConnection:Disconnect()
+        FlyConnection = nil
+    end
+    
+    if SafeHeightConnection then
+        SafeHeightConnection:Disconnect()
+        SafeHeightConnection = nil
+    end
+    
+    local bv, bg = CreateFly()
+    if not bv or not bg then return end
+    
+    while SafeModeActive and player.Character and player.Character:FindFirstChild("HumanoidRootPart") do
+        local humanoid = player.Character:FindFirstChild("Humanoid")
+        if not humanoid then break end
+        
+        local hpPercent = (humanoid.Health / humanoid.MaxHealth) * 100
+        
+        bv.Velocity = Vector3.new(0, FlySpeed * 0.8, 0)
+        bg.CFrame = CFrame.new(hrp.Position, hrp.Position + Vector3.new(0, 1, 0))
+        
+        if hpPercent >= 90 then
+            print("✅ HP recovered: " .. math.floor(hpPercent) .. "%")
+            SafeModeActive = false
+            bv.Velocity = Vector3.new(0, 0, 0)
+            CleanFly()
+            ShouldFly = true
+            task.wait(0.5)
+            break
+        end
+        
+        task.wait()
+    end
+    
+    if not SafeModeActive then
+        CleanFly()
+        ShouldFly = true
+    end
+end
+
+local function CheckHPAndSafety()
+    if not player.Character then return end
+    local humanoid = player.Character:FindFirstChild("Humanoid")
+    if not humanoid then return end
+    
+    local hpPercent = (humanoid.Health / humanoid.MaxHealth) * 100
+    
+    if hpPercent <= SafeModeHP and not SafeModeActive then
+        print("⚠️ LOW HP: " .. math.floor(hpPercent) .. "%")
+        if CurrentTarget then
+            print("🛑 Stopping hunt to heal!")
+        end
+        FlyToSafeHeight()
+    end
+end
+
+-------------------------------------------------
+-- TARGET SYSTEM
+-------------------------------------------------
+function GetTargets()
+    if SafeModeActive then return {} end
+    
+    local list = {}
+    for _, v in pairs(Players:GetPlayers()) do
+        if v ~= player and not IsIgnored(v) then
+            local char = v.Character
+            if char then
+                local humanoid = char:FindFirstChild("Humanoid")
+                local hrp = char:FindFirstChild("HumanoidRootPart")
+                
+                if humanoid and hrp and humanoid.Health > 0 then
+                    local skipTarget = false
+                    if Config.Team == "Marines" and v.Team and v.Team.Name == "Marines" then
+                        skipTarget = true
+                    elseif Config.Team == "Pirates" and v.Team and v.Team.Name == "Pirates" then
+                        skipTarget = true
+                    end
+                    
+                    if not skipTarget then
+                        table.insert(list, v)
+                    end
+                elseif humanoid and humanoid.Health <= 0 then
+                    AddToIgnored(v)
+                end
+            end
+        end
+    end
+    return list
+end
+
+function GetClosestTarget(targets)
+    if #targets == 0 then return nil end
+    if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then
+        return targets[1]
+    end
+    
+    local myPos = player.Character.HumanoidRootPart.Position
+    local closest = nil
+    local minDist = math.huge
+    
+    for _, target in pairs(targets) do
+        if target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
+            local dist = (target.Character.HumanoidRootPart.Position - myPos).Magnitude
+            if dist < minDist then
+                minDist = dist
+                closest = target
+            end
+        end
+    end
+    
+    return closest
+end
+
+-------------------------------------------------
+-- FLY TO TARGET
+-------------------------------------------------
+local function StartFlying(target)
+    if SafeModeActive then return end
+    
+    CleanFly()
+    CurrentTarget = target
+    Flying = true
+    IsAtSafeHeight = false
+    StartChaseTimer(target)
+    StartChaseTimeoutTracker(target)  -- Bắt đầu theo dõi thời gian chase
+    
+    if NoClipEnabled then EnableNoclip() end
+    
+    local targetDied = false
+    local targetNotFound = 0
+    
+    FlyConnection = RunService.Heartbeat:Connect(function()
+        CheckHPAndSafety()
+        
+        if SafeModeActive then
+            CleanFly()
+            return
+        end
+        
+        if not Flying or not CurrentTarget then return end
+        
+        if IsIgnored(CurrentTarget) then
+            -- Xóa tracker khi target bị ignore
+            ChaseTimeoutTracker[CurrentTarget.UserId] = nil
+            CleanFly()
+            return
+        end
+        
+        local char = player.Character
+        if not char then CleanFly(); return end
+        
+        local hrp = char:FindFirstChild("HumanoidRootPart")
+        if not hrp then CleanFly(); return end
+        
+        local targetChar = CurrentTarget.Character
+        if not targetChar then
+            targetNotFound = targetNotFound + 1
+            if targetNotFound > 10 then
+                if not targetDied then
+                    AddFailedAttempt(CurrentTarget)
+                    targetDied = true
+                end
+                -- Xóa tracker khi không tìm thấy target
+                ChaseTimeoutTracker[CurrentTarget.UserId] = nil
+                CleanFly()
+                return
+            end
+            return
+        end
+        
+        targetNotFound = 0
+        
+        local targetHRP = targetChar:FindFirstChild("HumanoidRootPart")
+        if not targetHRP then
+            AddFailedAttempt(CurrentTarget)
+            ChaseTimeoutTracker[CurrentTarget.UserId] = nil
+            CleanFly()
+            return
+        end
+        
+        local targetHum = targetChar:FindFirstChild("Humanoid")
+        if targetHum and targetHum.Health <= 0 then
+            if not targetDied then
+                print("💀 Defeated " .. CurrentTarget.Name)
+                AddToIgnored(CurrentTarget)
+                targetDied = true
+                ChaseStartTime[CurrentTarget.UserId] = nil
+                ChaseTimeoutTracker[CurrentTarget.UserId] = nil  -- Xóa tracker khi đánh bại
+            end
+            CleanFly()
+            return
+        end
+        
+        local bv = hrp:FindFirstChild("FlyVelocity")
+        local bg = hrp:FindFirstChild("FlyGyro")
+        
+        if not bv or not bg then
+            bv, bg = CreateFly()
+            if not bv or not bg then return end
+        end
+        
+        local targetPos = targetHRP.Position
+        local myPos = hrp.Position
+        local direction = (targetPos - myPos)
+        local distance = direction.Magnitude
+        
+        if distance > 0 then
+            local velocity = direction.Unit * FlySpeed
+            if distance < 10 then
+                velocity = direction.Unit * math.min(FlySpeed, distance * 10)
+            end
+            bv.Velocity = velocity
+        end
+        
+        bg.CFrame = CFrame.new(myPos, targetPos)
+        
+        if SpectateTarget and targetHum then
+            Camera.CameraSubject = targetHum
+        end
+    end)
+end
+
+-------------------------------------------------
+-- EQUIP SYSTEM
+-------------------------------------------------
+_G.SelectWeapon = nil
+
+function GetFruit()
+    if not player.Character then return end
+    local backpack = player:FindFirstChild("Backpack")
+    if not backpack then return end
+    
+    for _, v in pairs(backpack:GetChildren()) do
+        if v:IsA("Tool") and v.ToolTip == "Blox Fruit" then
+            _G.SelectWeapon = v.Name
+            return
+        end
+    end
+end
+
+function EquipFruit()
+    pcall(function()
+        if _G.SelectWeapon then
+            local char = player.Character
+            local backpack = player:FindFirstChild("Backpack")
+            if char and backpack then
+                local tool = backpack:FindFirstChild(_G.SelectWeapon)
+                local humanoid = char:FindFirstChild("Humanoid")
+                if tool and humanoid then
+                    humanoid:EquipTool(tool)
+                end
+            end
+        end
+    end)
+end
+
+task.spawn(function()
+    while true do
+        GetFruit()
+        EquipFruit()
+        task.wait(0.5)
+    end
+end)
+
+-------------------------------------------------
+-- MAIN LOOP
+-------------------------------------------------
+task.spawn(function()
+    while true do
+        if player.Character then
+            CheckHPAndSafety()
+        end
+        
+        if SafeModeActive then
+            task.wait(1)
+            continue
+        end
+        
+        if ShouldFly and player.Character and not SafeModeActive then
+            local targets = GetTargets()
+            
+            if #targets == 0 then
+                -- Không có người chơi: Bay lên cao không giới hạn thời gian
+                if AutoSafeHeight and not IsAtSafeHeight then
+                    CleanFly()
+                    FlyToSafeHeightNoPlayers()
+                end
+                task.wait(2)
+            else
+                -- Có người chơi: Tự động quay lại săn
+                if IsAtSafeHeight then
+                    print("🎯 Players detected - Resuming hunt!")
+                    IsAtSafeHeight = false
+                    CleanFly()
+                end
+                
+                local closestTarget = GetClosestTarget(targets)
+                if closestTarget then
+                    if not Flying or CurrentTarget ~= closestTarget then
+                        -- Nếu đang chase target cũ, xóa tracker của target cũ
+                        if CurrentTarget then
+                            ChaseTimeoutTracker[CurrentTarget.UserId] = nil
+                        end
+                        print("🎯 New target: " .. closestTarget.Name)
+                        StartFlying(closestTarget)
+                    end
+                end
+            end
+        end
+        task.wait(0.5)
+    end
+end)
+
+-------------------------------------------------
+-- RESPAWN HANDLER
+-------------------------------------------------
+player.CharacterAdded:Connect(function(char)
+    task.wait(1)
+    CleanFly()
+    DisableNoclip()
+    GetFruit()
+    EquipFruit()
+    
+    SafeModeActive = false
+    ShouldFly = true
+    IsAtSafeHeight = false
+    
+    IgnoredPlayers = {}
+    FailedTargets = {}
+    ChaseStartTime = {}
+    ChaseTimeoutTracker = {}  -- Reset tracker khi respawn
+    
+    print("✅ Character respawned!")
+    
+    task.wait(1)
+    AutoPVPCheck()
+    
+    -- Tự động bật PVP khi respawn
+    task.spawn(function()
+        task.wait(2)
+        if not PVPEnabled then
+            print("🔄 Auto-enabling PVP after respawn...")
+            EnablePVP()
+        end
+    end)
+end)
+
+-------------------------------------------------
+-- UI SYSTEM
+-------------------------------------------------
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "BountyUI"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ScreenGui.Parent = player:WaitForChild("PlayerGui")
+
+-- Main Container
+local Main = Instance.new("Frame")
+Main.Size = UDim2.new(0, 300, 0, 380)  -- Tăng chiều cao để thêm section mới
+Main.Position = UDim2.new(0.5, -150, 0, 10)
+Main.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+Main.BackgroundTransparency = 0.1
+Main.BorderSizePixel = 0
+Main.ClipsDescendants = true
+Main.Parent = ScreenGui
+
+local UICorner = Instance.new("UICorner", Main)
+UICorner.CornerRadius = UDim.new(0, 10)
+
+local UIGradient = Instance.new("UIGradient", Main)
+UIGradient.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0, Color3.fromRGB(30, 30, 40)),
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(20, 20, 30))
+})
+UIGradient.Rotation = 45
+
+-- Top Bar
+local TopBar = Instance.new("Frame")
+TopBar.Size = UDim2.new(1, 0, 0, 30)
+TopBar.Position = UDim2.new(0, 0, 0, 0)
+TopBar.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+TopBar.BorderSizePixel = 0
+TopBar.Parent = Main
+
+local TopGradient = Instance.new("UIGradient", TopBar)
+TopGradient.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0, Color3.fromRGB(40, 40, 60)),
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(25, 25, 40))
+})
+
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1, -10, 1, 0)
+Title.Position = UDim2.new(0, 5, 0, 0)
+Title.BackgroundTransparency = 1
+Title.Text = "⚔️ AUTO BOUNTY HUNTER"
+Title.Font = Enum.Font.GothamBold
+Title.TextSize = 12
+Title.TextColor3 = Color3.fromRGB(255, 200, 50)
+Title.TextXAlignment = Enum.TextXAlignment.Left
+Title.Parent = TopBar
+
+-- Content Area
+local ContentFrame = Instance.new("Frame")
+ContentFrame.Size = UDim2.new(1, 0, 1, -30)
+ContentFrame.Position = UDim2.new(0, 0, 0, 30)
+ContentFrame.BackgroundTransparency = 1
+ContentFrame.BorderSizePixel = 0
+ContentFrame.Parent = Main
+
+-- Helper function to create sections
+local function CreateSection(yPos, title, height)
+    local section = Instance.new("Frame")
+    section.Size = UDim2.new(1, -12, 0, height)
+    section.Position = UDim2.new(0, 6, 0, yPos)
+    section.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+    section.BackgroundTransparency = 0.3
+    section.BorderSizePixel = 0
+    section.Parent = ContentFrame
+    
+    local sectionCorner = Instance.new("UICorner", section)
+    sectionCorner.CornerRadius = UDim.new(0, 6)
+    
+    local sectionTitle = Instance.new("TextLabel")
+    sectionTitle.Size = UDim2.new(1, -12, 0, 16)
+    sectionTitle.Position = UDim2.new(0, 6, 0, 3)
+    sectionTitle.BackgroundTransparency = 1
+    sectionTitle.Text = title
+    sectionTitle.Font = Enum.Font.GothamBold
+    sectionTitle.TextSize = 10
+    sectionTitle.TextColor3 = Color3.fromRGB(200, 200, 220)
+    sectionTitle.TextXAlignment = Enum.TextXAlignment.Left
+    sectionTitle.Parent = section
+    
+    return section
+end
+
+-- Helper function to create labels
+local function CreateLabel(parent, yPos, text, color)
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1, -12, 0, 14)
+    label.Position = UDim2.new(0, 6, 0, yPos)
+    label.BackgroundTransparency = 1
+    label.Text = text
+    label.Font = Enum.Font.Gotham
+    label.TextSize = 9
+    label.TextColor3 = color or Color3.new(1, 1, 1)
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.Parent = parent
+    return label
+end
+
+-- Helper function to create buttons
+local function CreateButton(parent, position, size, text, color)
+    local button = Instance.new("TextButton")
+    button.Size = size
+    button.Position = position
+    button.BackgroundColor3 = color
+    button.Text = text
+    button.Font = Enum.Font.GothamBold
+    button.TextSize = 8
+    button.TextColor3 = Color3.new(1, 1, 1)
+    button.Parent = parent
+    
+    local buttonCorner = Instance.new("UICorner", button)
+    buttonCorner.CornerRadius = UDim.new(0, 4)
+    
+    -- Hover effect
+    button.MouseEnter:Connect(function()
+        TweenService:Create(button, TweenInfo.new(0.2), {
+            BackgroundColor3 = Color3.new(
+                math.min(color.R * 255 + 30, 255) / 255,
+                math.min(color.G * 255 + 30, 255) / 255,
+                math.min(color.B * 255 + 30, 255) / 255
+            )
+        }):Play()
+    end)
+    
+    button.MouseLeave:Connect(function()
+        TweenService:Create(button, TweenInfo.new(0.2), {BackgroundColor3 = color}):Play()
+    end)
+    
+    return button
+end
+
+-- Stats Section
+local statsSection = CreateSection(3, "📊 STATS", 100)
+local timeLabel = CreateLabel(statsSection, 20, "⏱️ 00:00:00", Color3.fromRGB(200, 220, 255))
+local bountyLabel = CreateLabel(statsSection, 34, "💰 Loading...", Color3.fromRGB(255, 215, 80))
+local statusLabel = CreateLabel(statsSection, 48, "📌 Init...", Color3.fromRGB(200, 200, 200))
+local targetLabel = CreateLabel(statsSection, 62, "🎯 None", Color3.fromRGB(100, 225, 100))
+local healthLabel = CreateLabel(statsSection, 76, "❤️ --- | 📏 --- | 💨 ---", Color3.fromRGB(230, 165, 95))
+
+-- Auto Ignore Section - HIỂN THỊ THỜI GIAN TỰ ĐỘNG BỎ QUA
+local autoIgnoreSection = CreateSection(106, "⏰ AUTO IGNORE TIMER", 35)
+local autoIgnoreLabel = CreateLabel(autoIgnoreSection, 18, "⏰ Auto Ignore: " .. AutoIgnoreTime .. "s | Status: Waiting...", Color3.fromRGB(255, 200, 100))
+
+-- Safe Mode Section
+local safeSection = CreateSection(144, "🛡️ SAFE", 35)
+local safeLabel = CreateLabel(safeSection, 18, "🛡️ INACTIVE | HP < " .. SafeModeHP .. "%", Color3.fromRGB(100, 255, 100))
+
+-- Safe Height Status Section
+local safeHeightSection = CreateSection(182, "🏔️ SAFE HEIGHT STATUS", 35)
+local safeHeightStatusLabel = CreateLabel(safeHeightSection, 18, "📍 Ground Level", Color3.fromRGB(100, 200, 255))
+
+-- PVP Status Section
+local pvpSection = CreateSection(220, "⚔️ PVP STATUS", 35)
+local pvpStatusLabel = CreateLabel(pvpSection, 18, "⚔️ Auto-enabling PVP...", Color3.fromRGB(255, 200, 50))
+
+-- Control Buttons
+local buttonSection = CreateSection(258, "🎮 CONTROLS", 95)
+
+-- Row 1
+CreateButton(buttonSection, UDim2.new(0, 6, 0, 18), UDim2.new(0, 135, 0, 22), "💾 SAVE CONFIG", Color3.fromRGB(50, 150, 220))
+CreateButton(buttonSection, UDim2.new(0, 147, 0, 18), UDim2.new(0, 135, 0, 22), "🗑️ CLEAR IGNORE", Color3.fromRGB(220, 120, 50))
+
+-- Row 2
+CreateButton(buttonSection, UDim2.new(0, 6, 0, 44), UDim2.new(0, 135, 0, 22), "🚫 IGNORE TARGET", Color3.fromRGB(255, 80, 80))
+CreateButton(buttonSection, UDim2.new(0, 147, 0, 44), UDim2.new(0, 135, 0, 22), "🛡️ SAFE MODE", Color3.fromRGB(255, 100, 100))
+
+-- Configure button click events
+for _, button in pairs(buttonSection:GetChildren()) do
+    if button:IsA("TextButton") then
+        if button.Text == "💾 SAVE CONFIG" then
+            button.MouseButton1Click:Connect(function()
+                SaveConfig()
+                statusLabel.Text = "📌 Config Saved! ✅"
+                task.wait(2)
+                statusLabel.Text = "📌 Active ⚡"
+            end)
+        elseif button.Text == "🗑️ CLEAR IGNORE" then
+            button.MouseButton1Click:Connect(function()
+                IgnoredPlayers = {}
+                FailedTargets = {}
+                ChaseStartTime = {}
+                ChaseTimeoutTracker = {}
+                statusLabel.Text = "📌 Cleared! ✅"
+                task.wait(2)
+                statusLabel.Text = "📌 Active ⚡"
+            end)
+        elseif button.Text == "🚫 IGNORE TARGET" then
+            button.MouseButton1Click:Connect(function()
+                if CurrentTarget then
+                    local targetName = CurrentTarget.Name
+                    AddToIgnored(CurrentTarget)
+                    CleanFly()
+                    statusLabel.Text = "📌 Ignored " .. targetName
+                else
+                    statusLabel.Text = "📌 No Target!"
+                    task.wait(2)
+                    statusLabel.Text = "📌 Active ⚡"
+                end
+            end)
+        elseif button.Text == "🛡️ SAFE MODE" then
+            button.MouseButton1Click:Connect(function()
+                statusLabel.Text = "📌 Safe Mode 🛡️"
+                FlyToSafeHeight()
+            end)
+        end
+    end
+end
+
+-------------------------------------------------
+-- DRAGGABLE UI
+-------------------------------------------------
+local dragToggle = nil
+local dragInput = nil
+local dragStart = nil
+local startPos = nil
+
+local function updateInput(input)
+    local delta = input.Position - dragStart
+    local position = UDim2.new(
+        startPos.X.Scale,
+        startPos.X.Offset + delta.X,
+        startPos.Y.Scale,
+        startPos.Y.Offset + delta.Y
+    )
+    TweenService:Create(Main, TweenInfo.new(0.1), {Position = position}):Play()
+end
+
+TopBar.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragToggle = true
+        dragStart = input.Position
+        startPos = Main.Position
+        
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                dragToggle = false
+            end
+        end)
+    end
+end)
+
+TopBar.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+        dragInput = input
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if input == dragInput and dragToggle then
+        updateInput(input)
+    end
+end)
+
+-------------------------------------------------
+-- UPDATE UI LOOPS
+-------------------------------------------------
+-- Time Counter & Status Updates
+local startTime = tick()
+task.spawn(function()
+    while task.wait(1) do
+        local e = math.floor(tick() - startTime)
+        timeLabel.Text = string.format("⏱️ %02d:%02d:%02d",
+            math.floor(e / 3600), math.floor((e % 3600) / 60), e % 60)
+        
+        -- Update auto ignore timer
+        if CurrentTarget and ChaseTimeoutTracker[CurrentTarget.UserId] then
+            local elapsed = tick() - ChaseTimeoutTracker[CurrentTarget.UserId]
+            local remaining = math.max(0, AutoIgnoreTime - elapsed)
+            autoIgnoreLabel.Text = string.format("⏰ Auto Ignore: %ds | Target: %s | Remaining: %ds", 
+                AutoIgnoreTime, CurrentTarget.Name, math.floor(remaining))
+            autoIgnoreLabel.TextColor3 = Color3.fromRGB(255, 200, 100)
+        else
+            autoIgnoreLabel.Text = "⏰ Auto Ignore: " .. AutoIgnoreTime .. "s | Status: Waiting..."
+            autoIgnoreLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+        end
+        
+        -- Update safe height status
+        if IsAtSafeHeight then
+            safeHeightStatusLabel.Text = "📍 At Safe Height (" .. SafeHeight .. "m) - Permanent"
+            safeHeightStatusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
+        else
+            safeHeightStatusLabel.Text = "📍 Ground Level"
+            safeHeightStatusLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+        end
+        
+        -- Update PVP status
+        if PVPEnabled then
+            pvpStatusLabel.Text = "⚔️ PVP: ✅ Enabled"
+            pvpStatusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
+        else
+            pvpStatusLabel.Text = "⚔️ PVP: ⏳ Auto-enabling..."
+            pvpStatusLabel.TextColor3 = Color3.fromRGB(255, 200, 50)
+        end
+        
+        if SafeModeActive then
+            statusLabel.Text = "📌 🛡️ SAFE MODE"
+            safeLabel.Text = "🛡️ ACTIVE | Healing..."
+            safeLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+        elseif not Flying and ShouldFly then
+            statusLabel.Text = "📌 🔍 Searching..."
+            safeLabel.Text = "🛡️ INACTIVE | < " .. SafeModeHP .. "%"
+            safeLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
+        end
+    end
+end)
+
+-- Bounty/Honor Display
+task.spawn(function()
+    while task.wait(2) do
+        pcall(function()
+            local leaderstats = player:FindFirstChild("leaderstats")
+            if leaderstats then
+                local stat = leaderstats:FindFirstChild("Bounty/Honor")
+                if stat then
+                    local v = stat.Value
+                    local nm = (player.Team and player.Team.Name == "Marines") and "Honor" or "Bounty"
+                    bountyLabel.Text = "💰 " .. nm .. ": " .. FormatNumber(v)
+                end
+            end
+        end)
+    end
+end)
+
+-- Target & Health Update
+task.spawn(function()
+    while task.wait(0.1) do
+        if CurrentTarget then
+            targetLabel.Text = "🎯 " .. CurrentTarget.Name
+            if CurrentTarget.Character and CurrentTarget.Character:FindFirstChild("Humanoid") then
+                local hum = CurrentTarget.Character.Humanoid
+                local hrp = CurrentTarget.Character:FindFirstChild("HumanoidRootPart")
+                local dist = 0
+                if hrp and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+                    dist = math.floor((hrp.Position - player.Character.HumanoidRootPart.Position).Magnitude)
+                end
+                healthLabel.Text = string.format("❤️ %d/%d | 📏 %d | 💨 %d", 
+                    math.floor(hum.Health), math.floor(hum.MaxHealth), dist, FlySpeed)
+            end
+        else
+            targetLabel.Text = "🎯 None"
+            healthLabel.Text = "❤️ --- | 📏 --- | 💨 ---"
+        end
+    end
+end)
+
+-------------------------------------------------
+-- STARTUP
+-------------------------------------------------
+task.spawn(function()
+    task.wait(3)
+    print("🚀 Auto Bounty Hunter Pro started!")
+    print("⚔️ Auto PVP: " .. tostring(AutoPVP) .. " (Auto-enable)")
+    print("🛡️ Safe Mode HP: " .. SafeModeHP .. "%")
+    print("🏔️ Auto Safe Height: " .. tostring(AutoSafeHeight) .. " (Unlimited time)")
+    print("⏰ Auto Ignore Time: " .. AutoIgnoreTime .. "s (Tự động bỏ qua sau " .. AutoIgnoreTime .. " giây)")
+    
+    task.wait(2)
+    statusLabel.Text = "📌 Active ⚡ (" .. GetValidPlayerCount() .. " players)"
+end)
