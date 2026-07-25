@@ -8,7 +8,7 @@ game.StarterGui:SetCore("SendNotification", {
 
     Callback = function(button)
         if button == "Copy" then
-            setclipboard("http://160.187.246.8:9999/output/noencode/premium/ripindra")
+            setclipboard("soon hop boss")
         elseif button == "Close" then
         end
     end
