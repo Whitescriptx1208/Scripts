@@ -1,6 +1,6 @@
 game.StarterGui:SetCore("SendNotification", {
-    Title = "turbolite.asia",
-    Text = "web free all script & executor latest 😈",
+    Title = "green hub",
+    Text = "on top ",
     Duration = 10,
 
     Button1 = "Copy",
