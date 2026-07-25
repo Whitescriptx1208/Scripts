@@ -8,7 +8,7 @@ game.StarterGui:SetCore("SendNotification", {
 
     Callback = function(button)
         if button == "Copy" then
-            setclipboard("turbolite.asia")
+            setclipboard("🤩")
         elseif button == "Close" then
         end
     end
