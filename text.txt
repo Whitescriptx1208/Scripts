@@ -1,0 +1,164 @@
+-- ===== SCRIPT AUTO KILL DOUGH KING =====
+-- Tải UI
+local library = loadstring(game:HttpGet('https://github.com/Footagesus/WindUI/releases/latest/download/main.lua'))()
+library:SetTheme('Dark')
+
+-- Tạo Config
+getgenv().Config = {
+    AutoDoughKing = false,
+    AutoHop = false,
+    HopSelected = 'Dough King'
+}
+
+-- Tạo Window
+local window = library:CreateWindow({
+    Folder = 'DoughKing',
+    Title = 'Auto Kill Dough King',
+    Transparent = true,
+    SideBarWidth = 200,
+    Author = 'Noguchi Hyuga',
+    Theme = 'Dark',
+    Size = UDim2.fromOffset(450, 300)
+})
+
+local tab = window:Tab({ Title = 'Main' })
+
+-- Toggle Auto Kill
+tab:Toggle({
+    Title = '🔥 Auto Kill Dough King',
+    Desc = 'Tự động tìm và tiêu diệt Dough King',
+    Default = false,
+    Callback = function(value)
+        getgenv().Config.AutoDoughKing = value
+        print(value and "✅ BẬT Auto Kill Dough King" or "❌ TẮT Auto Kill Dough King")
+    end
+})
+
+-- Button để test kill 1 lần
+tab:Button({
+    Title = '⚔️ Kill 1 Lần',
+    Desc = 'Tấn công Dough King 1 lần',
+    Callback = function()
+        KillDoughKingOnce()
+    end
+})
+
+-- Hàm Kill 1 lần
+function KillDoughKingOnce()
+    pcall(function()
+        local player = game.Players.LocalPlayer
+        local char = player.Character
+        if not char then return end
+        
+        local boss = nil
+        for _, v in pairs(workspace:GetDescendants()) do
+            if v:IsA("Model") and v.Name == "Dough King" then
+                local hrp = v:FindFirstChild("HumanoidRootPart")
+                local hum = v:FindFirstChild("Humanoid")
+                if hrp and hum and hum.Health > 0 then
+                    boss = v
+                    break
+                end
+            end
+        end
+        
+        if not boss then
+            print("❌ Không tìm thấy Dough King!")
+            return
+        end
+        
+        local bossHRP = boss:FindFirstChild("HumanoidRootPart")
+        local rootPart = char:FindFirstChild("HumanoidRootPart")
+        
+        if rootPart and bossHRP then
+            rootPart.CFrame = bossHRP.CFrame * CFrame.new(0, 0, 10)
+            wait(0.3)
+            
+            -- Tấn công
+            local tool = char:FindFirstChildOfClass("Tool")
+            if tool then
+                game:GetService("VirtualInputManager"):SendKeyEvent(true, "Q", false, game)
+                wait(0.1)
+                game:GetService("VirtualInputManager"):SendKeyEvent(false, "Q", false, game)
+            end
+            
+            local mouse = player:GetMouse()
+            mouse.Button1Down:Fire()
+            wait(0.05)
+            mouse.Button1Up:Fire()
+            
+            print("⚔️ Đã tấn công Dough King!")
+        end
+    end)
+end
+
+-- Loop Auto Kill
+spawn(function()
+    while wait(1) do
+        pcall(function()
+            if not getgenv().Config.AutoDoughKing then return end
+            
+            local player = game.Players.LocalPlayer
+            local char = player.Character
+            if not char or not char:FindFirstChild("Humanoid") then return end
+            
+            local rootPart = char:FindFirstChild("HumanoidRootPart")
+            if not rootPart then return end
+            
+            -- Tìm Dough King
+            local boss = nil
+            for _, v in pairs(workspace:GetDescendants()) do
+                if v:IsA("Model") and v.Name == "Dough King" then
+                    local hrp = v:FindFirstChild("HumanoidRootPart")
+                    local hum = v:FindFirstChild("Humanoid")
+                    if hrp and hum and hum.Health > 0 then
+                        boss = v
+                        break
+                    end
+                end
+            end
+            
+            if not boss then
+                print("🔍 Đang tìm Dough King...")
+                return
+            end
+            
+            local bossHRP = boss:FindFirstChild("HumanoidRootPart")
+            local bossHum = boss:FindFirstChild("Humanoid")
+            
+            if not bossHRP or not bossHum then return end
+            
+            -- Di chuyển đến boss
+            if (rootPart.Position - bossHRP.Position).Magnitude > 15 then
+                rootPart.CFrame = bossHRP.CFrame * CFrame.new(0, 0, 10)
+                wait(0.2)
+            end
+            
+            -- Tấn công
+            if (rootPart.Position - bossHRP.Position).Magnitude <= 15 then
+                -- Dùng tool
+                local tool = char:FindFirstChildOfClass("Tool")
+                if tool then
+                    game:GetService("VirtualInputManager"):SendKeyEvent(true, "Q", false, game)
+                    wait(0.1)
+                    game:GetService("VirtualInputManager"):SendKeyEvent(false, "Q", false, game)
+                end
+                
+                -- Click chuột
+                local mouse = player:GetMouse()
+                mouse.Button1Down:Fire()
+                wait(0.05)
+                mouse.Button1Up:Fire()
+                
+                -- Kiểm tra boss chết
+                if bossHum.Health <= 0 then
+                    print("✅ Đã tiêu diệt Dough King!")
+                    getgenv().Config.AutoDoughKing = false
+                end
+            end
+        end)
+    end
+end)
+
+print("✅ Script đã sẵn sàng!")
+print("📌 Bật Toggle 'Auto Kill Dough King' để bắt đầu")
