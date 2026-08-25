@@ -1,0 +1,183 @@
+
+local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
+
+local Window = WindUI:CreateWindow({
+    Title = "AimBot Hub",
+    Icon = "crosshair",
+    Folder = "AimBotHub",
+    Size = UDim2.fromOffset(520, 400),
+    Transparent = true,
+    Theme = "Dark"
+})
+
+local CombatTab = Window:Tab({
+    Title = "Combat",
+    Icon = "swords"
+})
+
+local MovementTab = Window:Tab({
+    Title = "Movement",
+    Icon = "activity"
+})
+
+--// Settings
+local AimBot = false
+local MaxDistance = 300
+local SpeedEnabled = false
+local WalkSpeed = 350
+local NoclipEnabled = false
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+
+--// Tìm người chơi gần nhất
+local function GetNearestPlayer()
+    local character = LocalPlayer.Character
+    local root = character and character:FindFirstChild("HumanoidRootPart")
+    if not root then return nil end
+
+    local nearest = nil
+    local nearestDistance = MaxDistance
+
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer then
+            local targetCharacter = player.Character
+            if targetCharacter then
+                local humanoid = targetCharacter:FindFirstChildOfClass("Humanoid")
+                local targetRoot = targetCharacter:FindFirstChild("HumanoidRootPart") or targetCharacter:FindFirstChild("Head")
+                
+                if humanoid and humanoid.Health > 0 and targetRoot then
+                    local distance = (root.Position - targetRoot.Position).Magnitude
+                    if distance < nearestDistance then
+                        nearestDistance = distance
+                        nearest = targetCharacter
+                    end
+                end
+            end
+        end
+    end
+
+    return nearest
+end
+
+--// Cập nhật tốc độ
+local function UpdateSpeed()
+    local character = LocalPlayer.Character
+    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+    if humanoid then
+        humanoid.WalkSpeed = SpeedEnabled and WalkSpeed or 16
+    end
+end
+
+--// Xử lý Noclip
+local function ToggleNoclip(enabled)
+    local character = LocalPlayer.Character
+    if not character then return end
+    
+    for _, part in ipairs(character:GetDescendants()) do
+        if part:IsA("BasePart") then
+            part.CanCollide = not enabled
+        end
+    end
+end
+
+--// Theo dõi khi nhân vật respawn
+LocalPlayer.CharacterAdded:Connect(function(character)
+    local humanoid = character:WaitForChild("Humanoid")
+    if SpeedEnabled then
+        humanoid.WalkSpeed = WalkSpeed
+    end
+    
+    if NoclipEnabled then
+        task.wait(0.1)
+        for _, part in ipairs(character:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.CanCollide = false
+            end
+        end
+    end
+end)
+
+--// Combat Tab
+CombatTab:Toggle({
+    Title = "Aim Bot",
+    Desc = "Aim at the nearest player",
+    Value = false,
+    Callback = function(value)
+        AimBot = value
+    end
+})
+
+CombatTab:Slider({
+    Title = "Max Distance",
+    Desc = "Maximum targeting distance",
+    Value = {
+        Min = 50,
+        Max = 1000,
+        Default = 300
+    },
+    Callback = function(value)
+        MaxDistance = value
+    end
+})
+
+--// Movement Tab
+MovementTab:Toggle({
+    Title = "Speed Hack",
+    Desc = "Enable speed modification",
+    Value = false,
+    Callback = function(value)
+        SpeedEnabled = value
+        UpdateSpeed()
+    end
+})
+
+MovementTab:Slider({
+    Title = "Walk Speed",
+    Desc = "Set your walking speed",
+    Value = {
+        Min = 106,
+        Max = 500,
+        Default = 350
+    },
+    Callback = function(value)
+        WalkSpeed = value
+        UpdateSpeed()
+    end
+})
+
+MovementTab:Toggle({
+    Title = "Noclip (Xuyên Tường)",
+    Desc = "Walk through walls",
+    Value = false,
+    Callback = function(value)
+        NoclipEnabled = value
+        ToggleNoclip(value)
+    end
+})
+
+--// Aim logic
+RunService.RenderStepped:Connect(function()
+    if not AimBot then return end
+    
+    local target = GetNearestPlayer()
+    if not target then return end
+    
+    local targetPart = target:FindFirstChild("Head") or target:FindFirstChild("HumanoidRootPart")
+    if not targetPart then return end
+    
+    Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, targetPart.Position)
+end)
+
+--// Noclip loop
+RunService.Stepped:Connect(function()
+    if NoclipEnabled and LocalPlayer.Character then
+        for _, part in ipairs(LocalPlayer.Character:GetDescendants()) do
+            if part:IsA("BasePart") and part.CanCollide then
+                part.CanCollide = false
+            end
+        end
+    end
+end)
