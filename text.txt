@@ -1,0 +1,678 @@
+--// WindUI
+local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
+
+local Window = WindUI:CreateWindow({
+    Title = "AimBot Hub",
+    Icon = "crosshair",
+    Folder = "AimBotHub",
+    Size = UDim2.fromOffset(520, 500),
+    Transparent = true,
+    Theme = "Dark"
+})
+
+local CombatTab = Window:Tab({
+    Title = "Combat",
+    Icon = "swords"
+})
+
+local MovementTab = Window:Tab({
+    Title = "Movement",
+    Icon = "activity"
+})
+
+local ESPTab = Window:Tab({
+    Title = "ESP",
+    Icon = "eye"
+})
+
+--// Settings
+local AimBot = false
+local SpeedEnabled = false
+local WalkSpeed = 350
+local NoclipEnabled = false
+local HighJumpEnabled = false
+local JumpPower = 150
+local AirWalkEnabled = false
+local AirWalkHeight = 10 -- Độ cao khi đi trên không trung
+
+--// ESP Settings
+local ESPConfig = {
+    Enabled = true,
+    ShowAvatar = true,
+    ShowName = true,
+    ShowDistance = true,
+    ShowHealth = true,
+    ShowBox = true,
+    MaxDistance = 500,
+    BoxColor = Color3.new(1, 0, 0),
+    NameColor = Color3.new(1, 1, 1),
+    TextSize = 14
+}
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+
+local espObjects = {}
+
+--// Tìm người chơi gần nhất (không giới hạn khoảng cách)
+local function GetNearestPlayer()
+    local character = LocalPlayer.Character
+    local root = character and character:FindFirstChild("HumanoidRootPart")
+    if not root then return nil end
+
+    local nearest = nil
+    local nearestDistance = math.huge -- Không giới hạn
+
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer then
+            local targetCharacter = player.Character
+            if targetCharacter then
+                local humanoid = targetCharacter:FindFirstChildOfClass("Humanoid")
+                local targetRoot = targetCharacter:FindFirstChild("HumanoidRootPart") or targetCharacter:FindFirstChild("Head")
+                
+                if humanoid and humanoid.Health > 0 and targetRoot then
+                    local distance = (root.Position - targetRoot.Position).Magnitude
+                    if distance < nearestDistance then
+                        nearestDistance = distance
+                        nearest = targetCharacter
+                    end
+                end
+            end
+        end
+    end
+
+    return nearest
+end
+
+--// Cập nhật tốc độ
+local function UpdateSpeed()
+    local character = LocalPlayer.Character
+    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+    if humanoid then
+        humanoid.WalkSpeed = SpeedEnabled and WalkSpeed or 16
+    end
+end
+
+--// Cập nhật Jump Power
+local function UpdateJumpPower()
+    local character = LocalPlayer.Character
+    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+    if humanoid then
+        humanoid.UseJumpPower = true
+        humanoid.JumpPower = HighJumpEnabled and JumpPower or 50
+    end
+end
+
+--// Xử lý Air Walk
+local function ToggleAirWalk(enabled)
+    local character = LocalPlayer.Character
+    if not character then return end
+    
+    local root = character:FindFirstChild("HumanoidRootPart")
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    
+    if not root or not humanoid then return end
+    
+    if enabled then
+        -- Tạo body velocity để giữ player trên không
+        local bodyVelocity = Instance.new("BodyVelocity")
+        bodyVelocity.Name = "AirWalkVelocity"
+        bodyVelocity.Velocity = Vector3.new(0, 0, 0)
+        bodyVelocity.MaxForce = Vector3.new(0, math.huge, 0) -- Chỉ giữ theo trục Y
+        bodyVelocity.Parent = root
+        
+        -- Tạo body gyro để giữ thăng bằng
+        local bodyGyro = Instance.new("BodyGyro")
+        bodyGyro.Name = "AirWalkGyro"
+        bodyGyro.CFrame = root.CFrame
+        bodyGyro.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
+        bodyGyro.D = 100
+        bodyGyro.P = 10000
+        bodyGyro.Parent = root
+        
+        humanoid.PlatformStand = true -- Cho phép đứng trên không
+    else
+        -- Xóa body velocity và gyro
+        local bodyVelocity = root:FindFirstChild("AirWalkVelocity")
+        local bodyGyro = root:FindFirstChild("AirWalkGyro")
+        
+        if bodyVelocity then
+            bodyVelocity:Destroy()
+        end
+        
+        if bodyGyro then
+            bodyGyro:Destroy()
+        end
+        
+        humanoid.PlatformStand = false
+    end
+end
+
+--// Air Walk Loop
+local function AirWalkLoop()
+    if not AirWalkEnabled then return end
+    
+    local character = LocalPlayer.Character
+    if not character then return end
+    
+    local root = character:FindFirstChild("HumanoidRootPart")
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    
+    if not root or not humanoid then return end
+    
+    local bodyVelocity = root:FindFirstChild("AirWalkVelocity")
+    local bodyGyro = root:FindFirstChild("AirWalkGyro")
+    
+    if not bodyVelocity or not bodyGyro then
+        ToggleAirWalk(true)
+        bodyVelocity = root:FindFirstChild("AirWalkVelocity")
+        bodyGyro = root:FindFirstChild("AirWalkGyro")
+    end
+    
+    if bodyVelocity and bodyGyro then
+        -- Cập nhật gyro theo camera
+        bodyGyro.CFrame = CFrame.new(root.Position, root.Position + Camera.CFrame.LookVector)
+        
+        -- Điều khiển di chuyển
+        local moveDirection = Vector3.new(0, 0, 0)
+        
+        if UserInputService:IsKeyDown(Enum.KeyCode.W) then
+            moveDirection = moveDirection + Camera.CFrame.LookVector
+        end
+        if UserInputService:IsKeyDown(Enum.KeyCode.S) then
+            moveDirection = moveDirection - Camera.CFrame.LookVector
+        end
+        if UserInputService:IsKeyDown(Enum.KeyCode.A) then
+            moveDirection = moveDirection - Camera.CFrame.RightVector
+        end
+        if UserInputService:IsKeyDown(Enum.KeyCode.D) then
+            moveDirection = moveDirection + Camera.CFrame.RightVector
+        end
+        
+        -- Điều chỉnh độ cao
+        if UserInputService:IsKeyDown(Enum.KeyCode.Space) then
+            root.Position = root.Position + Vector3.new(0, 0.5, 0)
+        end
+        if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) or UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then
+            root.Position = root.Position - Vector3.new(0, 0.5, 0)
+        end
+        
+        -- Di chuyển
+        if moveDirection.Magnitude > 0 then
+            moveDirection = moveDirection.Unit * WalkSpeed
+            root.Velocity = Vector3.new(moveDirection.X, 0, moveDirection.Z)
+        else
+            root.Velocity = Vector3.new(0, 0, 0)
+        end
+    end
+end
+
+--// Xử lý Noclip
+local function ToggleNoclip(enabled)
+    local character = LocalPlayer.Character
+    if not character then return end
+    
+    for _, part in ipairs(character:GetDescendants()) do
+        if part:IsA("BasePart") then
+            part.CanCollide = not enabled
+        end
+    end
+end
+
+--// ESP Functions
+local function CreateESP(player)
+    local character = player.Character
+    if not character then return end
+
+    local head = character:FindFirstChild("Head")
+    local root = character:FindFirstChild("HumanoidRootPart")
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+
+    if not head or not root or not humanoid then return end
+
+    -- Xóa ESP cũ nếu có
+    if espObjects[player] then
+        for _, obj in pairs(espObjects[player]) do
+            if obj then
+                obj:Destroy()
+            end
+        end
+    end
+
+    local espData = {}
+
+    -- Billboard GUI
+    local billboard = Instance.new("BillboardGui")
+    billboard.Name = "ESP_Billboard"
+    billboard.Size = UDim2.new(0, 200, 0, 80)
+    billboard.StudsOffset = Vector3.new(0, 2.5, 0)
+    billboard.AlwaysOnTop = true
+    billboard.MaxDistance = ESPConfig.MaxDistance
+    billboard.Adornee = head
+    billboard.Parent = character
+    espData.Billboard = billboard
+
+    -- Avatar
+    if ESPConfig.ShowAvatar then
+        local avatar = Instance.new("ImageLabel")
+        avatar.Name = "Avatar"
+        avatar.Size = UDim2.new(0, 40, 0, 40)
+        avatar.Position = UDim2.new(0.5, -20, 0, 0)
+        avatar.BackgroundTransparency = 1
+        avatar.Image = Players:GetUserThumbnailAsync(
+            player.UserId,
+            Enum.ThumbnailType.HeadShot,
+            Enum.ThumbnailSize.Size420x420
+        )
+        avatar.Parent = billboard
+        espData.Avatar = avatar
+    end
+
+    -- Tên
+    if ESPConfig.ShowName then
+        local nameLabel = Instance.new("TextLabel")
+        nameLabel.Name = "Name"
+        nameLabel.Size = UDim2.new(1, 0, 0, 20)
+        nameLabel.Position = UDim2.new(0, 0, 0, ESPConfig.ShowAvatar and 40 or 0)
+        nameLabel.BackgroundTransparency = 1
+        nameLabel.Text = player.DisplayName
+        nameLabel.TextColor3 = ESPConfig.NameColor
+        nameLabel.TextStrokeTransparency = 0
+        nameLabel.TextSize = ESPConfig.TextSize
+        nameLabel.Font = Enum.Font.SourceSansBold
+        nameLabel.Parent = billboard
+        espData.Name = nameLabel
+    end
+
+    -- Distance
+    if ESPConfig.ShowDistance then
+        local distLabel = Instance.new("TextLabel")
+        distLabel.Name = "Distance"
+        distLabel.Size = UDim2.new(1, 0, 0, 20)
+        distLabel.Position = UDim2.new(0, 0, 0, (ESPConfig.ShowAvatar and 40 or 0) + (ESPConfig.ShowName and 20 or 0))
+        distLabel.BackgroundTransparency = 1
+        distLabel.Text = "0m"
+        distLabel.TextColor3 = Color3.new(0, 1, 0)
+        distLabel.TextStrokeTransparency = 0
+        distLabel.TextSize = ESPConfig.TextSize - 2
+        distLabel.Font = Enum.Font.SourceSansBold
+        distLabel.Parent = billboard
+        espData.Distance = distLabel
+    end
+
+    -- Health bar
+    if ESPConfig.ShowHealth then
+        local healthFrame = Instance.new("Frame")
+        healthFrame.Name = "HealthFrame"
+        healthFrame.Size = UDim2.new(1, 0, 0, 4)
+        healthFrame.Position = UDim2.new(0, 0, 0, 0)
+        healthFrame.BackgroundColor3 = Color3.new(0, 0, 0)
+        healthFrame.BackgroundTransparency = 0.3
+        healthFrame.Parent = billboard
+        espData.HealthFrame = healthFrame
+
+        local healthBar = Instance.new("Frame")
+        healthBar.Name = "HealthBar"
+        healthBar.Size = UDim2.new(1, 0, 1, 0)
+        healthBar.BackgroundColor3 = Color3.new(0, 1, 0)
+        healthBar.Parent = healthFrame
+        espData.HealthBar = healthBar
+    end
+
+    -- Box ESP (Highlight)
+    if ESPConfig.ShowBox then
+        local highlight = Instance.new("Highlight")
+        highlight.Name = "ESP_Highlight"
+        highlight.FillColor = ESPConfig.BoxColor
+        highlight.FillTransparency = 0.7
+        highlight.OutlineColor = ESPConfig.BoxColor
+        highlight.OutlineTransparency = 0
+        highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+        highlight.Parent = character
+        espData.Highlight = highlight
+    end
+
+    espObjects[player] = espData
+
+    -- Update loop cho distance và health
+    task.spawn(function()
+        while espObjects[player] and character and character.Parent do
+            if ESPConfig.ShowDistance and espData.Distance then
+                local localChar = LocalPlayer.Character
+                local localRoot = localChar and localChar:FindFirstChild("HumanoidRootPart")
+                if localRoot and root then
+                    local distance = (localRoot.Position - root.Position).Magnitude
+                    espData.Distance.Text = string.format("%.0fm", distance)
+                end
+            end
+
+            if ESPConfig.ShowHealth and espData.HealthBar and humanoid then
+                local healthPercent = humanoid.Health / humanoid.MaxHealth
+                espData.HealthBar.Size = UDim2.new(healthPercent, 0, 1, 0)
+                
+                -- Đổi màu health bar
+                if healthPercent > 0.5 then
+                    espData.HealthBar.BackgroundColor3 = Color3.new(0, 1, 0)
+                elseif healthPercent > 0.25 then
+                    espData.HealthBar.BackgroundColor3 = Color3.new(1, 1, 0)
+                else
+                    espData.HealthBar.BackgroundColor3 = Color3.new(1, 0, 0)
+                end
+            end
+
+            task.wait(0.1)
+        end
+    end)
+end
+
+local function RemoveESP(player)
+    if espObjects[player] then
+        for _, obj in pairs(espObjects[player]) do
+            if obj and obj.Parent then
+                obj:Destroy()
+            end
+        end
+        espObjects[player] = nil
+    end
+end
+
+local function UpdateAllESP()
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer then
+            if ESPConfig.Enabled then
+                CreateESP(player)
+            else
+                RemoveESP(player)
+            end
+        end
+    end
+end
+
+--// Player handlers
+local function onPlayerAdded(player)
+    if player == LocalPlayer then return end
+
+    player.CharacterAdded:Connect(function(char)
+        char:WaitForChild("Head", 5)
+        char:WaitForChild("HumanoidRootPart", 5)
+        task.wait(0.2)
+        if ESPConfig.Enabled then
+            CreateESP(player)
+        end
+    end)
+
+    if player.Character and ESPConfig.Enabled then
+        CreateESP(player)
+    end
+end
+
+local function onPlayerRemoving(player)
+    RemoveESP(player)
+end
+
+Players.PlayerAdded:Connect(onPlayerAdded)
+Players.PlayerRemoving:Connect(onPlayerRemoving)
+
+--// Theo dõi khi nhân vật respawn
+LocalPlayer.CharacterAdded:Connect(function(character)
+    local humanoid = character:WaitForChild("Humanoid")
+    
+    task.wait(0.5)
+    
+    if SpeedEnabled then
+        humanoid.WalkSpeed = WalkSpeed
+    end
+    
+    if HighJumpEnabled then
+        humanoid.UseJumpPower = true
+        humanoid.JumpPower = JumpPower
+    end
+    
+    if NoclipEnabled then
+        task.wait(0.1)
+        for _, part in ipairs(character:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.CanCollide = false
+            end
+        end
+    end
+    
+    if AirWalkEnabled then
+        task.wait(0.1)
+        ToggleAirWalk(true)
+    end
+end)
+
+--// Combat Tab
+CombatTab:Toggle({
+    Title = "Aim Bot",
+    Desc = "Aim at the nearest player (no distance limit)",
+    Value = false,
+    Callback = function(value)
+        AimBot = value
+    end
+})
+
+--// Movement Tab
+MovementTab:Toggle({
+    Title = "Speed Hack",
+    Desc = "Enable speed modification",
+    Value = false,
+    Callback = function(value)
+        SpeedEnabled = value
+        UpdateSpeed()
+    end
+})
+
+MovementTab:Slider({
+    Title = "Walk Speed",
+    Desc = "Set your walking speed",
+    Value = {
+        Min = 16,
+        Max = 500,
+        Default = 350
+    },
+    Callback = function(value)
+        WalkSpeed = value
+        UpdateSpeed()
+    end
+})
+
+MovementTab:Toggle({
+    Title = "Noclip (Xuyên Tường)",
+    Desc = "Walk through walls",
+    Value = false,
+    Callback = function(value)
+        NoclipEnabled = value
+        ToggleNoclip(value)
+    end
+})
+
+MovementTab:Toggle({
+    Title = "High Jump (Nhảy Cao)",
+    Desc = "Jump much higher",
+    Value = false,
+    Callback = function(value)
+        HighJumpEnabled = value
+        UpdateJumpPower()
+    end
+})
+
+MovementTab:Slider({
+    Title = "Jump Power",
+    Desc = "Set your jump power",
+    Value = {
+        Min = 50,
+        Max = 500,
+        Default = 150
+    },
+    Callback = function(value)
+        JumpPower = value
+        UpdateJumpPower()
+    end
+})
+
+MovementTab:Toggle({
+    Title = "Air Walk (Đi Trên Không)",
+    Desc = "Walk in the air",
+    Value = false,
+    Callback = function(value)
+        AirWalkEnabled = value
+        ToggleAirWalk(value)
+    end
+})
+
+--// ESP Tab
+ESPTab:Toggle({
+    Title = "Enable ESP",
+    Desc = "Show player ESP",
+    Value = true,
+    Callback = function(value)
+        ESPConfig.Enabled = value
+        UpdateAllESP()
+    end
+})
+
+ESPTab:Toggle({
+    Title = "Show Avatar",
+    Desc = "Show player avatar",
+    Value = true,
+    Callback = function(value)
+        ESPConfig.ShowAvatar = value
+        UpdateAllESP()
+    end
+})
+
+ESPTab:Toggle({
+    Title = "Show Name",
+    Desc = "Show player name",
+    Value = true,
+    Callback = function(value)
+        ESPConfig.ShowName = value
+        UpdateAllESP()
+    end
+})
+
+ESPTab:Toggle({
+    Title = "Show Distance",
+    Desc = "Show distance to player",
+    Value = true,
+    Callback = function(value)
+        ESPConfig.ShowDistance = value
+        UpdateAllESP()
+    end
+})
+
+ESPTab:Toggle({
+    Title = "Show Health",
+    Desc = "Show player health bar",
+    Value = true,
+    Callback = function(value)
+        ESPConfig.ShowHealth = value
+        UpdateAllESP()
+    end
+})
+
+ESPTab:Toggle({
+    Title = "Show Box",
+    Desc = "Show player highlight box",
+    Value = true,
+    Callback = function(value)
+        ESPConfig.ShowBox = value
+        UpdateAllESP()
+    end
+})
+
+ESPTab:Slider({
+    Title = "ESP Distance",
+    Desc = "Maximum ESP distance",
+    Value = {
+        Min = 100,
+        Max = 2000,
+        Default = 500
+    },
+    Callback = function(value)
+        ESPConfig.MaxDistance = value
+        for _, espData in pairs(espObjects) do
+            if espData.Billboard then
+                espData.Billboard.MaxDistance = value
+            end
+        end
+    end
+})
+
+ESPTab:Slider({
+    Title = "Text Size",
+    Desc = "ESP text size",
+    Value = {
+        Min = 8,
+        Max = 30,
+        Default = 14
+    },
+    Callback = function(value)
+        ESPConfig.TextSize = value
+        for _, espData in pairs(espObjects) do
+            if espData.Name then
+                espData.Name.TextSize = value
+            end
+        end
+    end
+})
+
+--// Aim logic (không giới hạn khoảng cách)
+RunService.RenderStepped:Connect(function()
+    if not AimBot then return end
+    
+    local target = GetNearestPlayer()
+    if not target then return end
+    
+    local targetPart = target:FindFirstChild("Head") or target:FindFirstChild("HumanoidRootPart")
+    if not targetPart then return end
+    
+    Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, targetPart.Position)
+end)
+
+--// Noclip loop
+RunService.Stepped:Connect(function()
+    if NoclipEnabled and LocalPlayer.Character then
+        for _, part in ipairs(LocalPlayer.Character:GetDescendants()) do
+            if part:IsA("BasePart") and part.CanCollide then
+                part.CanCollide = false
+            end
+        end
+    end
+end)
+
+--// Speed và Jump loop
+RunService.Heartbeat:Connect(function()
+    if LocalPlayer.Character then
+        local humanoid = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+        if humanoid then
+            if SpeedEnabled and humanoid.WalkSpeed ~= WalkSpeed then
+                humanoid.WalkSpeed = WalkSpeed
+            end
+            
+            if HighJumpEnabled then
+                humanoid.UseJumpPower = true
+                if humanoid.JumpPower ~= JumpPower then
+                    humanoid.JumpPower = JumpPower
+                end
+            end
+        end
+    end
+end)
+
+--// Air Walk loop
+RunService.RenderStepped:Connect(function()
+    if AirWalkEnabled then
+        AirWalkLoop()
+    end
+end)
+
+--// Khởi tạo ESP cho players hiện tại
+for _, player in ipairs(Players:GetPlayers()) do
+    onPlayerAdded(player)
+end
