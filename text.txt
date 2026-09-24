@@ -1,0 +1,1332 @@
+--[[
+═══════════════════════════════════════════════════════════════════════════
+    NEXUS — Roblox Executor UI  ·  v1.1.0 (compact + smooth)
+    Single file. No key, no auth, no remote loader.
+
+    Scale & feel are controlled by the constants in [1].
+    Tweak SCALE to resize the entire window.
+    Tweak Theme for palette.
+═══════════════════════════════════════════════════════════════════════════
+]]
+
+-- ══════════════════════════════════════════════════════════════════════════
+--  [0] GUARD
+-- ══════════════════════════════════════════════════════════════════════════
+if getgenv().NEXUS_LOADED then return getgenv().NEXUS_LOADED end
+getgenv().NEXUS_LOADED = true
+
+-- ══════════════════════════════════════════════════════════════════════════
+--  [1] CONSTANTS
+-- ══════════════════════════════════════════════════════════════════════════
+local VERSION = "1.1.0"
+
+-- base window (before scale)
+local BASE_W, BASE_H = 720, 460
+-- SCALE: 1.0 = original size · 0.66 ≈ 2/3 · 0.5 ≈ half · 0.25 = 4× smaller
+local SCALE = 0.62
+
+local W = math.floor(BASE_W * SCALE)
+local H = math.floor(BASE_H * SCALE)
+
+-- derived layout metrics
+local TOPBAR_H   = math.floor(40 * SCALE) + 6
+local SIDEBAR_W  = math.floor(180 * SCALE) + 12
+local PAD        = math.max(6,  math.floor(14 * SCALE))
+local GAP        = math.max(4,  math.floor(8  * SCALE))
+local RADIUS     = math.max(6,  math.floor(12 * SCALE))
+local RADIUS_SM  = math.max(4,  math.floor(8  * SCALE))
+local BTN_H      = math.max(22, math.floor(30 * SCALE))
+local FONT_BASE  = math.max(11, math.floor(14 * SCALE) + 2)
+
+local FOLDER  = "Nexus"
+local CFG     = FOLDER .. "/config.json"
+local SCRIPTS = FOLDER .. "/scripts"
+
+-- ══════════════════════════════════════════════════════════════════════════
+--  [2] SERVICES
+-- ══════════════════════════════════════════════════════════════════════════
+local Players          = game:GetService("Players")
+local RunService       = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local TweenService     = game:GetService("TweenService")
+local HttpService      = game:GetService("HttpService")
+local CoreGui          = game:GetService("CoreGui")
+
+local LP = Players.LocalPlayer
+
+-- ══════════════════════════════════════════════════════════════════════════
+--  [3] THEME
+-- ══════════════════════════════════════════════════════════════════════════
+local Theme = {
+    bg        = Color3.fromRGB(12, 13, 17),
+    surface   = Color3.fromRGB(18, 20, 26),
+    surface_2 = Color3.fromRGB(24, 27, 35),
+    surface_3 = Color3.fromRGB(32, 36, 46),
+    border    = Color3.fromRGB(40, 45, 58),
+    border_hi = Color3.fromRGB(60, 68, 88),
+    text      = Color3.fromRGB(234, 237, 246),
+    text_dim  = Color3.fromRGB(118, 126, 148),
+    text_mute = Color3.fromRGB(80, 88, 108),
+    accent    = Color3.fromRGB(96, 140, 255),
+    accent_2  = Color3.fromRGB(150, 96, 255),
+    green     = Color3.fromRGB(74, 214, 130),
+    red       = Color3.fromRGB(255, 84, 96),
+    yellow    = Color3.fromRGB(255, 196, 96),
+}
+
+-- ══════════════════════════════════════════════════════════════════════════
+--  [4] FILE SYSTEM
+-- ══════════════════════════════════════════════════════════════════════════
+local FS = {}
+
+local function fs_ok()
+    return type(writefile) == "function" and type(readfile) == "function"
+       and type(isfolder)  == "function" and type(makefolder) == "function"
+end
+
+function FS.init()
+    if not fs_ok() then return false end
+    if not isfolder(FOLDER)  then makefolder(FOLDER)  end
+    if not isfolder(SCRIPTS) then makefolder(SCRIPTS) end
+    return true
+end
+
+function FS.read(path)
+    if not fs_ok() or not isfile(path) then return nil end
+    local ok, d = pcall(readfile, path); return ok and d or nil
+end
+
+function FS.write(path, data)
+    if not fs_ok() then return false end
+    return (pcall(writefile, path, data))
+end
+
+function FS.exists(path)
+    if not fs_ok() then return false end
+    return isfile(path) or isfolder(path)
+end
+
+function FS.load_config()
+    if not fs_ok() then return {} end
+    local raw = FS.read(CFG); if not raw then return {} end
+    local ok, d = pcall(HttpService.JSONDecode, HttpService, raw)
+    return ok and d or {}
+end
+
+function FS.save_config(t)
+    if not fs_ok() then return false end
+    local ok, e = pcall(HttpService.JSONEncode, HttpService, t)
+    if not ok then return false end
+    return FS.write(CFG, e)
+end
+
+-- ══════════════════════════════════════════════════════════════════════════
+--  [5] STATE
+-- ══════════════════════════════════════════════════════════════════════════
+local State = {
+    config         = FS.load_config(),
+    tabs           = {},
+    active_tab     = 1,
+    console        = {},
+    active_page    = nil,
+    sidebar_refs   = {},
+    pill           = nil,
+}
+
+State.config.FontSize       = State.config.FontSize or FONT_BASE
+State.config.WebhookURL     = State.config.WebhookURL or ""
+State.config.WebhookEnabled = State.config.WebhookEnabled or false
+
+-- ══════════════════════════════════════════════════════════════════════════
+--  [6] UTIL
+-- ══════════════════════════════════════════════════════════════════════════
+local U = {}
+
+function U.class(n, p, parent)
+    local o = Instance.new(n)
+    for k, v in pairs(p or {}) do o[k] = v end
+    if parent then o.Parent = parent end
+    return o
+end
+
+function U.corner(r, parent)
+    return U.class("UICorner", { CornerRadius = UDim.new(0, r or RADIUS_SM) }, parent)
+end
+
+function U.stroke(color, thick, trans, parent)
+    return U.class("UIStroke", {
+        Color = color or Theme.border,
+        Thickness = thick or 1,
+        Transparency = trans or 0,
+        ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+    }, parent)
+end
+
+function U.grad(parent, c1, c2, rot)
+    return U.class("UIGradient", {
+        Color = ColorSequence.new(c1, c2),
+        Rotation = rot or 0,
+    }, parent)
+end
+
+function U.pad(t, r, b, l, parent)
+    return U.class("UIPadding", {
+        PaddingTop    = UDim.new(0, t or 0),
+        PaddingRight  = UDim.new(0, r or 0),
+        PaddingBottom = UDim.new(0, b or 0),
+        PaddingLeft   = UDim.new(0, l or 0),
+    }, parent)
+end
+
+function U.list(dir, pad, parent, halign, valign)
+    return U.class("UIListLayout", {
+        FillDirection       = dir or Enum.FillDirection.Vertical,
+        Padding             = UDim.new(0, pad or GAP),
+        HorizontalAlignment = halign or Enum.HorizontalAlignment.Left,
+        VerticalAlignment   = valign or Enum.VerticalAlignment.Top,
+        SortOrder           = Enum.SortOrder.LayoutOrder,
+    }, parent)
+end
+
+function U.tween(obj, time, props, style, dir)
+    local t = TweenService:Create(obj, TweenInfo.new(
+        time, style or Enum.EasingStyle.Quart, dir or Enum.EasingDirection.Out
+    ), props)
+    t:Play(); return t
+end
+
+function U.now() return os.date("%H:%M:%S") end
+
+function U.clip_set(s)
+    if type(setclipboard) == "function" then pcall(setclipboard, tostring(s)); return true end
+    if type(toclipboard) == "function" then pcall(toclipboard, tostring(s)); return true end
+    return false
+end
+
+function U.clip_get()
+    if type(getclipboard) == "function" then
+        local ok, v = pcall(getclipboard); return ok and v or ""
+    end
+    return ""
+end
+
+function U.exec_name()
+    if type(identifyexecutor) == "function" then
+        local ok, n, v = pcall(identifyexecutor)
+        if ok and n then return tostring(n), tostring(v or "") end
+    end
+    return "Unknown", ""
+end
+
+-- ══════════════════════════════════════════════════════════════════════════
+--  [7] CONSOLE
+-- ══════════════════════════════════════════════════════════════════════════
+Console = { _subs = {} }
+
+function Console.on(cb) table.insert(Console._subs, cb) end
+
+function Console.push(level, msg)
+    local e = { level = level, msg = tostring(msg), time = U.now() }
+    table.insert(State.console, e)
+    if #State.console > 500 then table.remove(State.console, 1) end
+    for _, cb in ipairs(Console._subs) do pcall(cb, e) end
+end
+
+function Console.info(m)  Console.push("info",  m) end
+function Console.warn(m)  Console.push("warn",  m) end
+function Console.error(m) Console.push("error", m) end
+
+do
+    local rp, rw = print, warn
+    _G.print = function(...)
+        local p = {}
+        for i = 1, select("#", ...) do p[#p+1] = tostring(select(i, ...)) end
+        Console.info(table.concat(p, " ")); pcall(rp, ...)
+    end
+    _G.warn = function(...)
+        local p = {}
+        for i = 1, select("#", ...) do p[#p+1] = tostring(select(i, ...)) end
+        Console.warn(table.concat(p, " ")); pcall(rw, ...)
+    end
+end
+
+-- ══════════════════════════════════════════════════════════════════════════
+--  [8] EXEC ENGINE
+-- ══════════════════════════════════════════════════════════════════════════
+local Exec = {}
+
+function Exec.run(src, label)
+    label = label or "script"
+    if type(src) ~= "string" or #src == 0 then
+        Console.warn("Empty source for " .. label); return false
+    end
+    if type(loadstring) ~= "function" then
+        Console.error("loadstring unavailable"); return false
+    end
+    local fn = loadstring(src, "@Nexus/" .. label)
+    if not fn then Console.error("Compile failed: " .. label); return false end
+    local t0 = os.clock()
+    local ok, err = pcall(fn)
+    local dt = string.format("%.3fs", os.clock() - t0)
+    if ok then Console.info(("Ran %s in %s"):format(label, dt))
+    else        Console.error(("%s → %s"):format(label, tostring(err))) end
+    return ok
+end
+
+function Exec.run_file(path)
+    local c = FS.read(path)
+    if not c then Console.error("Cannot read " .. path); return false end
+    return Exec.run(c, path:match("([^/]+)$") or "script")
+end
+
+function Exec.run_clip()
+    local c = U.clip_get()
+    if not c or c == "" then Console.warn("Clipboard empty"); return false end
+    return Exec.run(c, "clipboard")
+end
+
+-- ══════════════════════════════════════════════════════════════════════════
+--  [9] WEBHOOK
+-- ══════════════════════════════════════════════════════════════════════════
+local Webhook = {}
+
+function Webhook.send(title, desc, color)
+    if not State.config.WebhookEnabled then return end
+    if State.config.WebhookURL == "" then return end
+    task.spawn(function()
+        local body = HttpService:JSONEncode({ embeds = {{
+            title = title, description = desc,
+            color = color or 0x608CFF,
+            footer = { text = "Nexus v" .. VERSION },
+            timestamp = DateTime.now():ToIsoDate(),
+        }}})
+        pcall(function()
+            request({
+                Url = State.config.WebhookURL, Method = "POST",
+                Headers = { ["Content-Type"] = "application/json" },
+                Body = body,
+            })
+        end)
+    end)
+end
+
+-- ══════════════════════════════════════════════════════════════════════════
+--  [10] UI PRIMITIVES
+-- ══════════════════════════════════════════════════════════════════════════
+local UI = {}
+
+function UI.label(parent, text, size, pos, color, align, bold)
+    local l = U.class("TextLabel", {
+        Text = text, Size = size, Position = pos or UDim2.new(),
+        BackgroundTransparency = 1,
+        TextColor3 = color or Theme.text,
+        Font = bold and Enum.Font.GothamBold or Enum.Font.Gotham,
+        TextSize = State.config.FontSize,
+        TextXAlignment = align or Enum.TextXAlignment.Left,
+        TextYAlignment = Enum.TextYAlignment.Center,
+    }, parent)
+    return l
+end
+
+function UI.button(parent, text, size, pos, color, cb, style)
+    style = style or "solid"
+    local b = U.class("TextButton", {
+        Text = text, Size = size, Position = pos or UDim2.new(),
+        BackgroundColor3 = color or Theme.accent,
+        BackgroundTransparency = (style == "ghost") and 0.75 or 0,
+        BorderSizePixel = 0,
+        Font = Enum.Font.GothamMedium,
+        TextColor3 = Theme.text,
+        TextSize = State.config.FontSize,
+        AutoButtonColor = false,
+    }, parent)
+    U.corner(RADIUS_SM, b)
+    if style == "outline" then U.stroke(Theme.border_hi, 1, 0, b) end
+
+    local base_color = color or Theme.accent
+    local base_bg    = b.BackgroundTransparency
+
+    b.MouseEnter:Connect(function()
+        U.tween(b, 0.18, {
+            BackgroundColor3 = base_color:Lerp(Color3.new(1,1,1), 0.14),
+            BackgroundTransparency = math.max(0, base_bg - 0.15),
+        })
+    end)
+    b.MouseLeave:Connect(function()
+        U.tween(b, 0.22, {
+            BackgroundColor3 = base_color,
+            BackgroundTransparency = base_bg,
+        })
+    end)
+    b.MouseButton1Down:Connect(function()
+        U.tween(b, 0.08, { BackgroundTransparency = math.min(1, base_bg + 0.1) })
+    end)
+    b.MouseButton1Up:Connect(function()
+        U.tween(b, 0.14, { BackgroundTransparency = base_bg })
+    end)
+
+    if cb then
+        b.MouseButton1Click:Connect(function()
+            local ok, err = pcall(cb)
+            if not ok then Console.error("Button: " .. tostring(err)) end
+        end)
+    end
+    return b
+end
+
+function UI.input(parent, placeholder, size, pos, cb)
+    local t = U.class("TextBox", {
+        Size = size, Position = pos or UDim2.new(),
+        BackgroundColor3 = Theme.surface_2,
+        BorderSizePixel = 0,
+        Font = Enum.Font.Gotham,
+        PlaceholderText = placeholder or "",
+        PlaceholderColor3 = Theme.text_mute,
+        TextColor3 = Theme.text,
+        TextSize = State.config.FontSize,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        ClearTextOnFocus = false,
+    }, parent)
+    U.corner(RADIUS_SM, t)
+    local s = U.stroke(Theme.border, 1, 0, t)
+    U.pad(0, 10, 0, 10, t)
+
+    t.Focused:Connect(function()
+        U.tween(s, 0.2, { Color = Theme.accent, Transparency = 0.2 })
+    end)
+    t.FocusLost:Connect(function(enter)
+        U.tween(s, 0.2, { Color = Theme.border, Transparency = 0 })
+        if cb then pcall(cb, t.Text, enter) end
+    end)
+    return t
+end
+
+-- ══════════════════════════════════════════════════════════════════════════
+--  [11] TOASTS
+-- ══════════════════════════════════════════════════════════════════════════
+local ToastHost
+
+local function ensure_toast_host()
+    if ToastHost and ToastHost.Parent then return ToastHost end
+    local gui = getgenv().NexusGui; if not gui then return nil end
+    ToastHost = U.class("Frame", {
+        Name = "Toasts",
+        AnchorPoint = Vector2.new(1, 1),
+        Position = UDim2.new(1, -PAD, 1, -PAD),
+        Size = UDim2.new(0, math.floor(280 * SCALE) + 40, 1, -40),
+        BackgroundTransparency = 1,
+    }, gui)
+    U.list(Enum.FillDirection.Vertical, 6, ToastHost,
+        Enum.HorizontalAlignment.Right, Enum.VerticalAlignment.Bottom)
+    return ToastHost
+end
+
+function Notify(title, msg, level)
+    level = level or "info"
+    local host = ensure_toast_host(); if not host then return end
+    local accent = ({
+        info = Theme.accent, ok = Theme.green,
+        warn = Theme.yellow, error = Theme.red,
+    })[level] or Theme.accent
+
+    local h = math.floor(56 * SCALE) + 22
+    local f = U.class("Frame", {
+        Size = UDim2.new(1, 0, 0, h),
+        BackgroundColor3 = Theme.surface,
+        BorderSizePixel = 0,
+    }, host)
+    U.corner(RADIUS_SM, f)
+    local st = U.stroke(accent, 1, 0.55, f)
+    U.pad(8, 12, 8, 14, f)
+
+    local bar = U.class("Frame", {
+        Size = UDim2.new(0, 3, 1, -8),
+        Position = UDim2.new(0, 0, 0, 4),
+        BackgroundColor3 = accent,
+        BorderSizePixel = 0,
+    }, f)
+    U.corner(2, bar)
+
+    UI.label(f, title, UDim2.new(1, 0, 0, 16), UDim2.new(0, 8, 0, 0), accent, nil, true)
+    local m = UI.label(f, msg or "", UDim2.new(1, 0, 1, -18), UDim2.new(0, 8, 0, 18), Theme.text_dim)
+    m.TextWrapped = true
+    m.TextYAlignment = Enum.TextYAlignment.Top
+
+    f.Position = UDim2.new(1, 60, 0, 0)
+    U.tween(f, 0.35, { Position = UDim2.new(0, 0, 0, 0) },
+        Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
+
+    task.delay(4.5, function()
+        U.tween(f, 0.3, { Position = UDim2.new(1, 60, 0, 0) },
+            Enum.EasingStyle.Quart, Enum.EasingDirection.In)
+        task.wait(0.35)
+        pcall(function()
+            U.tween(st, 0.15, { Transparency = 1 })
+            f:Destroy()
+        end)
+    end)
+end
+
+-- ══════════════════════════════════════════════════════════════════════════
+--  [12] WINDOW BUILD
+-- ══════════════════════════════════════════════════════════════════════════
+local host
+do
+    if type(gethui) == "function" then
+        local ok, h = pcall(gethui); host = ok and h or CoreGui
+    else host = CoreGui end
+end
+
+local screen = U.class("ScreenGui", {
+    Name = "NexusExecutor",
+    ResetOnSpawn = false,
+    ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+    IgnoreGuiInset = true,
+}, host)
+getgenv().NexusGui = screen
+
+if type(protect_gui) == "function" then pcall(protect_gui, screen) end
+
+-- outer glow (soft)
+local glow = U.class("Frame", {
+    AnchorPoint = Vector2.new(0.5, 0.5),
+    Position = UDim2.new(0.5, 0, 0.5, 0),
+    Size = UDim2.new(0, W + 8, 0, H + 8),
+    BackgroundColor3 = Theme.accent,
+    BackgroundTransparency = 0.9,
+    BorderSizePixel = 0,
+    ZIndex = 0,
+}, screen)
+U.corner(RADIUS + 6, glow)
+
+local root = U.class("Frame", {
+    Name = "Root",
+    AnchorPoint = Vector2.new(0.5, 0.5),
+    Position = UDim2.new(0.5, 0, 0.5, 0),
+    Size = UDim2.new(0, W, 0, H),
+    BackgroundColor3 = Theme.bg,
+    BorderSizePixel = 0,
+    Active = true,
+    ClipsDescendants = true,
+    ZIndex = 1,
+}, screen)
+U.corner(RADIUS, root)
+U.stroke(Theme.border, 1, 0.1, root)
+
+-- entrance animation
+root.Size = UDim2.new(0, W - 40, 0, H - 20)
+root.BackgroundTransparency = 1
+U.tween(root, 0.4, {
+    Size = UDim2.new(0, W, 0, H),
+    BackgroundTransparency = 0,
+}, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
+U.tween(glow, 0.6, { BackgroundTransparency = 0.85 })
+
+-- ── Drag ─────────────────────────────────────────────────────────────────
+do
+    local dragging, spos, soff, drag_input
+
+    local function begin(i)
+        dragging, spos, soff, drag_input = true, i.Position, root.Position, i
+        U.tween(root, 0.12, {
+            Size = UDim2.new(0, W, 0, H),
+        }, Enum.EasingStyle.Quad)
+        i.Changed:Connect(function()
+            if i.UserInputState == Enum.UserInputState.End then dragging = false end
+        end)
+    end
+
+    UserInputService.InputChanged:Connect(function(i)
+        if not dragging then return end
+        if i.UserInputType ~= Enum.UserInputType.MouseMovement
+        and i.UserInputType ~= Enum.UserInputType.Touch then return end
+        local d = i.Position - spos
+        root.Position = UDim2.new(
+            soff.X.Scale, soff.X.Offset + d.X,
+            soff.Y.Scale, soff.Y.Offset + d.Y
+        )
+    end)
+
+    State._begin_drag = begin
+end
+
+-- ══════════════════════════════════════════════════════════════════════════
+--  [13] TOPBAR
+-- ══════════════════════════════════════════════════════════════════════════
+local topbar = U.class("Frame", {
+    Size = UDim2.new(1, 0, 0, TOPBAR_H),
+    BackgroundColor3 = Theme.surface,
+    BorderSizePixel = 0,
+    ZIndex = 2,
+}, root)
+U.class("Frame", { -- square the bottom of topbar corner
+    Size = UDim2.new(1, 0, 0, RADIUS),
+    Position = UDim2.new(0, 0, 1, -RADIUS),
+    BackgroundColor3 = Theme.surface,
+    BorderSizePixel = 0,
+    ZIndex = topbar.ZIndex + 1,
+}, topbar)
+
+-- gradient sheen on topbar
+U.grad(topbar, Theme.surface, Theme.surface:Lerp(Theme.accent, 0.08), 90)
+
+-- bottom hairline
+U.class("Frame", {
+    Size = UDim2.new(1, 0, 0, 1),
+    Position = UDim2.new(0, 0, 1, -1),
+    BackgroundColor3 = Theme.border,
+    BorderSizePixel = 0,
+    ZIndex = 4,
+}, topbar)
+
+topbar.InputBegan:Connect(function(i)
+    if i.UserInputType == Enum.UserInputType.MouseButton1
+    or i.UserInputType == Enum.UserInputType.Touch then
+        State._begin_drag(i)
+    end
+end)
+
+-- logo
+local logo = UI.label(topbar, "NEXUS",
+    UDim2.new(0, 80, 1, 0), UDim2.new(0, 14, 0, 0), Theme.text, nil, true)
+logo.TextSize = math.max(13, math.floor(16 * SCALE) + 4)
+logo.TextXAlignment = Enum.TextXAlignment.Left
+local logo_grad = U.grad(logo, Theme.accent, Theme.accent_2, 0)
+
+local ver = UI.label(topbar, "v" .. VERSION,
+    UDim2.new(0, 60, 1, 0), UDim2.new(0, 14 + 48, 0, 0), Theme.text_mute)
+ver.TextSize = math.max(9, math.floor(11 * SCALE) + 3)
+
+-- right controls
+local controls = U.class("Frame", {
+    AnchorPoint = Vector2.new(1, 0.5),
+    Position = UDim2.new(1, -10, 0.5, 0),
+    Size = UDim2.new(0, 76, 0, 22),
+    BackgroundTransparency = 1,
+}, topbar)
+U.list(Enum.FillDirection.Horizontal, 4, controls)
+
+local function ctrl(text, color, cb)
+    local b = UI.button(controls, text, UDim2.new(0, 22, 0, 22), nil,
+        Theme.surface_3, cb, "ghost")
+    b.TextSize = math.max(11, math.floor(13 * SCALE) + 3)
+    b.Font = Enum.Font.GothamBold
+    b.TextColor3 = Theme.text_dim
+    b.MouseEnter:Connect(function() b.TextColor3 = color end)
+    b.MouseLeave:Connect(function() b.TextColor3 = Theme.text_dim end)
+    return b
+end
+
+ctrl("—", Theme.yellow, function()
+    root.Visible = false
+    if not getgenv().NexusToggle then
+        local t = UI.button(screen, "N", UDim2.new(0, 40, 0, 40),
+            UDim2.new(0, 20, 0.5, -20), Theme.accent, function()
+            root.Visible = true
+            t:Destroy(); getgenv().NexusToggle = nil
+        end)
+        t.Font = Enum.Font.GothamBold
+        t.TextSize = 16
+        U.corner(20, t)
+        U.stroke(Theme.border_hi, 1, 0.3, t)
+        -- drag toggle
+        local dg, sp, so
+        t.InputBegan:Connect(function(i)
+            if i.UserInputType == Enum.UserInputType.MouseButton1
+            or i.UserInputType == Enum.UserInputType.Touch then
+                dg, sp, so = true, i.Position, t.Position
+                i.Changed:Connect(function()
+                    if i.UserInputState == Enum.UserInputState.End then dg = false end
+                end)
+            end
+        end)
+        UserInputService.InputChanged:Connect(function(i)
+            if not dg then return end
+            if i.UserInputType ~= Enum.UserInputType.MouseMovement
+            and i.UserInputType ~= Enum.UserInputType.Touch then return end
+            local d = i.Position - sp
+            t.Position = UDim2.new(so.X.Scale, so.X.Offset + d.X,
+                                   so.Y.Scale, so.Y.Offset + d.Y)
+        end)
+        getgenv().NexusToggle = t
+    end
+end)
+
+ctrl("×", Theme.red, function()
+    FS.save_config(State.config)
+    U.tween(root, 0.25, {
+        Size = UDim2.new(0, W - 40, 0, H - 20),
+        BackgroundTransparency = 1,
+    }, Enum.EasingStyle.Quart, Enum.EasingDirection.In)
+    U.tween(glow, 0.25, { BackgroundTransparency = 1 })
+    task.wait(0.28)
+    screen:Destroy()
+    getgenv().NEXUS_LOADED = nil
+end)
+
+-- ══════════════════════════════════════════════════════════════════════════
+--  [14] SIDEBAR
+-- ══════════════════════════════════════════════════════════════════════════
+local sidebar = U.class("Frame", {
+    Size = UDim2.new(0, SIDEBAR_W, 1, -TOPBAR_H),
+    Position = UDim2.new(0, 0, 0, TOPBAR_H),
+    BackgroundColor3 = Theme.surface,
+    BorderSizePixel = 0,
+    ZIndex = 2,
+}, root)
+U.pad(PAD, PAD - 2, PAD, PAD - 2, sidebar)
+U.list(Enum.FillDirection.Vertical, 4, sidebar)
+
+-- vertical hairline
+U.class("Frame", {
+    Size = UDim2.new(0, 1, 1, 0),
+    Position = UDim2.new(0, SIDEBAR_W, 0, 0),
+    BackgroundColor3 = Theme.border,
+    BorderSizePixel = 0,
+    ZIndex = 3,
+}, root)
+
+local content = U.class("Frame", {
+    Size = UDim2.new(1, -SIDEBAR_W - 1, 1, -TOPBAR_H),
+    Position = UDim2.new(0, SIDEBAR_W + 1, 0, TOPBAR_H),
+    BackgroundColor3 = Theme.bg,
+    BorderSizePixel = 0,
+    ZIndex = 2,
+}, root)
+
+-- ── Pages ────────────────────────────────────────────────────────────────
+local Pages = {}
+local function new_page()
+    return U.class("Frame", {
+        Size = UDim2.new(1, 0, 1, 0),
+        BackgroundTransparency = 1,
+        Visible = false,
+    }, content)
+end
+
+Pages.home     = new_page()
+Pages.scripts  = new_page()
+Pages.editor   = new_page()
+Pages.console  = new_page()
+Pages.settings = new_page()
+
+-- pill indicator
+local pill = U.class("Frame", {
+    Size = UDim2.new(1, 0, 0, BTN_H),
+    Position = UDim2.new(0, 0, 0, 0),
+    BackgroundColor3 = Theme.accent,
+    BackgroundTransparency = 0.85,
+    BorderSizePixel = 0,
+    ZIndex = 1,
+}, sidebar)
+U.corner(RADIUS_SM, pill)
+local pill_bar = U.class("Frame", {
+    Size = UDim2.new(0, 2, 0, BTN_H - 10),
+    Position = UDim2.new(0, 0, 0.5, -(BTN_H - 10) / 2),
+    BackgroundColor3 = Theme.accent,
+    BorderSizePixel = 0,
+    ZIndex = 2,
+}, pill)
+U.corner(1, pill_bar)
+
+-- buttons
+local sb_buttons = {}
+
+local function add_sb(name, label, order)
+    local b = U.class("TextButton", {
+        Size = UDim2.new(1, 0, 0, BTN_H),
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+        Text = "  " .. label,
+        Font = Enum.Font.GothamMedium,
+        TextColor3 = Theme.text_dim,
+        TextSize = State.config.FontSize,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        AutoButtonColor = false,
+        LayoutOrder = order,
+        ZIndex = 3,
+    }, sidebar)
+    U.corner(RADIUS_SM, b)
+    sb_buttons[name] = b
+
+    b.MouseEnter:Connect(function()
+        if State.active_page ~= name then
+            U.tween(b, 0.15, { TextColor3 = Theme.text })
+        end
+    end)
+    b.MouseLeave:Connect(function()
+        if State.active_page ~= name then
+            U.tween(b, 0.2, { TextColor3 = Theme.text_dim })
+        end
+    end)
+
+    b.MouseButton1Click:Connect(function()
+        State._switch_page(name)
+    end)
+    return b
+end
+
+add_sb("home",     "Home",     1)
+add_sb("scripts",  "Scripts",  2)
+add_sb("editor",   "Editor",   3)
+add_sb("console",  "Console",  4)
+add_sb("settings", "Settings", 5)
+
+-- page switcher with smooth transitions
+State._switch_page = function(name)
+    if State.active_page == name then return end
+    local prev = State.active_page and Pages[State.active_page]
+
+    -- update button states
+    for k, b in pairs(sb_buttons) do
+        if k == name then
+            U.tween(b, 0.2, { TextColor3 = Theme.text })
+        else
+            U.tween(b, 0.2, { TextColor3 = Theme.text_dim })
+        end
+    end
+
+    -- slide pill
+    local target_y = (sb_buttons[name].LayoutOrder - 1) * (BTN_H + 4)
+    U.tween(pill, 0.28, { Position = UDim2.new(0, 0, 0, target_y) },
+        Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
+
+    -- fade out old page
+    local newp = Pages[name]
+    if prev then
+        U.tween(prev, 0.12, { BackgroundTransparency = 1 }, Enum.EasingStyle.Quad)
+        task.delay(0.1, function() prev.Visible = false end)
+    end
+
+    -- fade in new
+    task.delay(0.1, function()
+        newp.Visible = true
+        newp.BackgroundTransparency = 1
+        U.tween(newp, 0.2, { BackgroundTransparency = 1 })
+    end)
+
+    State.active_page = name
+    getgenv().NexusActivePage = name
+end
+
+-- activate home
+State._switch_page("home")
+
+-- ══════════════════════════════════════════════════════════════════════════
+--  [15] PAGE — HOME
+-- ══════════════════════════════════════════════════════════════════════════
+do
+    local p = Pages.home
+    U.pad(PAD + 4, PAD + 4, PAD + 4, PAD + 4, p)
+
+    local exec_n, exec_v = U.exec_name()
+
+    local title = UI.label(p, "Hey, " .. LP.DisplayName,
+        UDim2.new(1, 0, 0, math.floor(24 * SCALE) + 8), nil, Theme.text, nil, true)
+    title.TextSize = math.max(14, math.floor(18 * SCALE) + 6)
+
+    local sub = UI.label(p,
+        exec_n .. " " .. exec_v .. "  ·  Place " .. game.PlaceId,
+        UDim2.new(1, 0, 0, 16), UDim2.new(0, 0, 0, title.AbsoluteSize.Y),
+        Theme.text_mute)
+    sub.TextSize = math.max(9, math.floor(11 * SCALE) + 3)
+
+    -- Quick execute card
+    local qc_h = math.floor(120 * SCALE) + 40
+    local qc = U.class("Frame", {
+        Size = UDim2.new(1, 0, 0, qc_h),
+        Position = UDim2.new(0, 0, 0, title.AbsoluteSize.Y + 24),
+        BackgroundColor3 = Theme.surface,
+        BorderSizePixel = 0,
+    }, p)
+    U.corner(RADIUS, qc)
+    U.stroke(Theme.border, 1, 0, qc)
+    U.pad(10, 10, 10, 10, qc)
+
+    UI.label(qc, "Quick execute",
+        UDim2.new(1, 0, 0, 16), nil, Theme.text, nil, true)
+
+    local qin = U.class("TextBox", {
+        Size = UDim2.new(1, 0, 1, -56),
+        Position = UDim2.new(0, 0, 0, 22),
+        BackgroundColor3 = Theme.surface_2,
+        BorderSizePixel = 0,
+        Text = "",
+        PlaceholderText = "Paste a script or raw URL...",
+        PlaceholderColor3 = Theme.text_mute,
+        TextColor3 = Theme.text,
+        TextSize = State.config.FontSize,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        TextYAlignment = Enum.TextYAlignment.Top,
+        MultiLine = true, TextWrapped = true,
+        ClearTextOnFocus = false,
+        Font = Enum.Font.Code,
+    }, qc)
+    U.corner(RADIUS_SM, qin)
+    U.stroke(Theme.border, 1, 0, qin)
+    U.pad(6, 8, 6, 8, qin)
+    qin.Focused:Connect(function() U.tween(qin:FindFirstChildOfClass("UIStroke"), 0.2, { Color = Theme.accent }) end)
+    qin.FocusLost:Connect(function() U.tween(qin:FindFirstChildOfClass("UIStroke"), 0.2, { Color = Theme.border }) end)
+
+    -- action row
+    local row = U.class("Frame", {
+        Size = UDim2.new(1, 0, 0, BTN_H),
+        Position = UDim2.new(0, 0, 1, -BTN_H),
+        BackgroundTransparency = 1,
+    }, qc)
+    U.list(Enum.FillDirection.Horizontal, 6, row)
+
+    local run_b = UI.button(row, "Execute", UDim2.new(0, math.floor(96 * SCALE) + 20, 1, 0),
+        nil, Theme.green, function()
+        local s = qin.Text
+        if s == "" then return end
+        if s:match("^https?://") then
+            task.spawn(function()
+                local ok, b = pcall(game.HttpGet, game, s)
+                if ok and b then Exec.run(b, "remote")
+                else Console.error("Fetch failed: " .. s) end
+            end)
+        else Exec.run(s, "quick") end
+    end)
+    run_b.LayoutOrder = 1
+
+    local paste_b = UI.button(row, "Paste", UDim2.new(0, math.floor(70 * SCALE) + 16, 1, 0),
+        nil, Theme.surface_3, function() qin.Text = U.clip_get() end)
+    paste_b.LayoutOrder = 2
+
+    -- stats strip
+    local stats = U.class("Frame", {
+        Size = UDim2.new(1, 0, 1, -(title.AbsoluteSize.Y + 24 + qc_h + 10)),
+        Position = UDim2.new(0, 0, 0, title.AbsoluteSize.Y + 24 + qc_h + 10),
+        BackgroundColor3 = Theme.surface,
+        BorderSizePixel = 0,
+    }, p)
+    U.corner(RADIUS, stats)
+    U.stroke(Theme.border, 1, 0, stats)
+    U.pad(10, 12, 10, 12, stats)
+    U.list(Enum.FillDirection.Vertical, 4, stats)
+
+    local function stat_row(lbl, val)
+        local r = U.class("Frame", {
+            Size = UDim2.new(1, 0, 0, math.floor(20 * SCALE) + 6),
+            BackgroundTransparency = 1,
+        }, stats)
+        UI.label(r, lbl, UDim2.new(0.5, 0, 1, 0), nil, Theme.text_mute)
+        local v = UI.label(r, val, UDim2.new(0.5, 0, 1, 0), UDim2.new(0.5, 0, 0, 0),
+            Theme.text, Enum.TextXAlignment.Right)
+        return v
+    end
+
+    stat_row("Place",    tostring(game.PlaceId))
+    stat_row("Job",      string.sub(game.JobId, 1, 12) .. "...")
+    local s_players = stat_row("Players", tostring(#Players:GetPlayers()))
+    local s_ping    = stat_row("Ping",    "0 ms")
+
+    task.spawn(function()
+        while screen.Parent do
+            pcall(function()
+                s_players.Text = tostring(#Players:GetPlayers())
+                s_ping.Text = math.floor(LP:GetNetworkPing() * 2000) .. " ms"
+            end)
+            task.wait(2)
+        end
+    end)
+end
+
+-- ══════════════════════════════════════════════════════════════════════════
+--  [16] PAGE — SCRIPTS
+-- ══════════════════════════════════════════════════════════════════════════
+do
+    local p = Pages.scripts
+    U.pad(PAD + 4, PAD + 4, PAD + 4, PAD + 4, p)
+
+    local head = U.class("Frame", {
+        Size = UDim2.new(1, 0, 0, BTN_H),
+        BackgroundTransparency = 1,
+    }, p)
+    local hl = UI.label(head, "Script library", UDim2.new(0.5, 0, 1, 0), nil, Theme.text, nil, true)
+    hl.TextSize = math.max(12, math.floor(15 * SCALE) + 4)
+
+    local new_b = UI.button(head, "+ New",
+        UDim2.new(0, math.floor(70 * SCALE) + 14, 1, 0),
+        UDim2.new(1, -(math.floor(70 * SCALE) + 14), 0, 0),
+        Theme.accent, function()
+        local name = "script_" .. os.time() .. ".lua"
+        FS.write(SCRIPTS .. "/" .. name, "-- new script\n")
+        Notify("Created", name, "ok")
+        if State._refresh_scripts then State._refresh_scripts() end
+    end)
+
+    local list = U.class("ScrollingFrame", {
+        Size = UDim2.new(1, 0, 1, -(BTN_H + 8)),
+        Position = UDim2.new(0, 0, 0, BTN_H + 8),
+        BackgroundColor3 = Theme.surface,
+        BorderSizePixel = 0,
+        CanvasSize = UDim2.new(),
+        AutomaticCanvasSize = Enum.AutomaticSize.Y,
+        ScrollBarThickness = 3,
+        ScrollBarImageColor3 = Theme.border,
+    }, p)
+    U.corner(RADIUS, list)
+    U.stroke(Theme.border, 1, 0, list)
+    U.pad(8, 8, 8, 8, list)
+    U.list(Enum.FillDirection.Vertical, 4, list)
+
+    State._refresh_scripts = function()
+        for _, c in ipairs(list:GetChildren()) do
+            if c:IsA("Frame") then c:Destroy() end
+        end
+        local files = {}
+        if type(listfiles) == "function" and fs_ok() then
+            local ok, l = pcall(listfiles, SCRIPTS); if ok and l then files = l end
+        end
+        if #files == 0 then
+            local e = UI.label(list, "No scripts yet.", UDim2.new(1, 0, 0, 40), nil, Theme.text_mute,
+                Enum.TextXAlignment.Center)
+            return
+        end
+        table.sort(files)
+        for _, file in ipairs(files) do
+            local path = SCRIPTS .. "/" .. file
+            if FS.exists(path) then
+                local r = U.class("Frame", {
+                    Size = UDim2.new(1, 0, 0, BTN_H + 8),
+                    BackgroundColor3 = Theme.surface_2,
+                    BorderSizePixel = 0,
+                }, list)
+                U.corner(RADIUS_SM, r)
+                U.stroke(Theme.border, 1, 0, r)
+                U.pad(4, 8, 4, 12, r)
+
+                local nm = UI.label(r, file, UDim2.new(1, -180, 1, 0), nil, Theme.text)
+                nm.TextTruncate = Enum.TextTruncate.AtEnd
+
+                local bw = math.floor(54 * SCALE) + 10
+                local x = 1
+                UI.button(r, "Run", UDim2.new(0, bw, 0, BTN_H),
+                    UDim2.new(1, -(bw*3 + 12), 0.5, -BTN_H/2),
+                    Theme.green, function() Exec.run_file(path) end)
+
+                UI.button(r, "Edit", UDim2.new(0, bw, 0, BTN_H),
+                    UDim2.new(1, -(bw*2 + 8), 0.5, -BTN_H/2),
+                    Theme.accent, function()
+                    table.insert(State.tabs, { name = file, content = FS.read(path) or "", path = path })
+                    State.active_tab = #State.tabs
+                    if State._rebuild_editor then State._rebuild_editor() end
+                    State._switch_page("editor")
+                end)
+
+                UI.button(r, "×", UDim2.new(0, bw, 0, BTN_H),
+                    UDim2.new(1, -(bw + 4), 0.5, -BTN_H/2),
+                    Theme.red, function()
+                    pcall(delfile, path)
+                    Notify("Deleted", file, "warn")
+                    State._refresh_scripts()
+                end)
+            end
+        end
+    end
+    State._refresh_scripts()
+end
+
+-- ══════════════════════════════════════════════════════════════════════════
+--  [17] PAGE — EDITOR
+-- ══════════════════════════════════════════════════════════════════════════
+do
+    local p = Pages.editor
+    U.pad(PAD + 2, PAD + 2, PAD + 2, PAD + 2, p)
+
+    local tabs_bar = U.class("Frame", {
+        Size = UDim2.new(1, 0, 0, math.floor(24 * SCALE) + 6),
+        BackgroundTransparency = 1,
+    }, p)
+    U.list(Enum.FillDirection.Horizontal, 4, tabs_bar)
+
+    local TAB_BAR_H = math.floor(24 * SCALE) + 6
+
+    local ed_host = U.class("Frame", {
+        Size = UDim2.new(1, 0, 1, -(TAB_BAR_H + BTN_H + 14)),
+        Position = UDim2.new(0, 0, 0, TAB_BAR_H + 6),
+        BackgroundColor3 = Theme.surface,
+        BorderSizePixel = 0,
+    }, p)
+    U.corner(RADIUS, ed_host)
+    U.stroke(Theme.border, 1, 0, ed_host)
+
+    local ed = U.class("TextBox", {
+        Size = UDim2.new(1, -16, 1, -16),
+        Position = UDim2.new(0, 8, 0, 8),
+        BackgroundTransparency = 1,
+        Text = "",
+        PlaceholderText = "-- start typing",
+        PlaceholderColor3 = Theme.text_mute,
+        TextColor3 = Theme.text,
+        TextSize = State.config.FontSize,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        TextYAlignment = Enum.TextYAlignment.Top,
+        MultiLine = true, TextWrapped = false,
+        ClearTextOnFocus = false,
+        Font = Enum.Font.Code,
+    }, ed_host)
+
+    local bar = U.class("Frame", {
+        Size = UDim2.new(1, 0, 0, BTN_H),
+        Position = UDim2.new(0, 0, 1, -BTN_H),
+        BackgroundTransparency = 1,
+    }, p)
+    U.list(Enum.FillDirection.Horizontal, 5, bar)
+
+    local function mkbtn(txt, color, cb)
+        return UI.button(bar, txt,
+            UDim2.new(0, math.floor(70 * SCALE) + 16, 1, 0), nil, color, cb)
+    end
+
+    mkbtn("Execute", Theme.green,   function() Exec.run(ed.Text, "editor") end)
+    mkbtn("Save",    Theme.accent,  function()
+        local tab = State.tabs[State.active_tab]
+        if not tab then Notify("Save", "No active tab", "warn"); return end
+        tab.path = tab.path or (SCRIPTS .. "/" .. tab.name)
+        FS.write(tab.path, ed.Text)
+        tab.content = ed.Text
+        Notify("Saved", tab.name, "ok")
+        if State._refresh_scripts then State._refresh_scripts() end
+    end)
+    mkbtn("Copy",   Theme.surface_3, function() U.clip_set(ed.Text); Notify("Copied", "clipboard", "ok") end)
+    mkbtn("Paste",  Theme.surface_3, function() ed.Text = ed.Text .. U.clip_get() end)
+    mkbtn("Clear",  Theme.red,       function() ed.Text = "" end)
+
+    State._rebuild_editor = function()
+        for _, c in ipairs(tabs_bar:GetChildren()) do
+            if c:IsA("TextButton") then c:Destroy() end
+        end
+        if #State.tabs == 0 then
+            State.tabs[1] = { name = "untitled.lua", content = "" }
+            State.active_tab = 1
+        end
+        for i, tab in ipairs(State.tabs) do
+            local active = (i == State.active_tab)
+            local b = UI.button(tabs_bar, tab.name,
+                UDim2.new(0, math.floor(110 * SCALE) + 20, 1, 0), nil,
+                active and Theme.accent or Theme.surface_2, function()
+                State.active_tab = i
+                State._rebuild_editor()
+            end)
+            b.TextTruncate = Enum.TextTruncate.AtEnd
+            b.TextXAlignment = Enum.TextXAlignment.Center
+        end
+        ed.Text = State.tabs[State.active_tab].content or ""
+    end
+
+    ed.FocusLost:Connect(function()
+        local t = State.tabs[State.active_tab]
+        if t then t.content = ed.Text end
+    end)
+
+    State._rebuild_editor()
+end
+
+-- ══════════════════════════════════════════════════════════════════════════
+--  [18] PAGE — CONSOLE
+-- ══════════════════════════════════════════════════════════════════════════
+do
+    local p = Pages.console
+    U.pad(PAD + 2, PAD + 2, PAD + 2, PAD + 2, p)
+
+    local head = U.class("Frame", {
+        Size = UDim2.new(1, 0, 0, BTN_H),
+        BackgroundTransparency = 1,
+    }, p)
+    local hl = UI.label(head, "Console", UDim2.new(0.5, 0, 1, 0), nil, Theme.text, nil, true)
+    hl.TextSize = math.max(12, math.floor(15 * SCALE) + 4)
+
+    local btw = math.floor(70 * SCALE) + 14
+    UI.button(head, "Clear", UDim2.new(0, btw, 1, 0),
+        UDim2.new(1, -btw, 0, 0), Theme.red, function()
+        State.console = {}
+        if State._refresh_console then State._refresh_console() end
+    end)
+
+    local scroll = U.class("ScrollingFrame", {
+        Size = UDim2.new(1, 0, 1, -(BTN_H + 6)),
+        Position = UDim2.new(0, 0, 0, BTN_H + 6),
+        BackgroundColor3 = Theme.surface,
+        BorderSizePixel = 0,
+        CanvasSize = UDim2.new(),
+        AutomaticCanvasSize = Enum.AutomaticSize.Y,
+        ScrollBarThickness = 3,
+        ScrollBarImageColor3 = Theme.border,
+    }, p)
+    U.corner(RADIUS, scroll)
+    U.stroke(Theme.border, 1, 0, scroll)
+    U.pad(8, 8, 8, 8, scroll)
+    U.list(Enum.FillDirection.Vertical, 2, scroll)
+
+    local function level_color(l)
+        return ({ info = Theme.text, warn = Theme.yellow, error = Theme.red })[l] or Theme.text
+    end
+
+    State._refresh_console = function()
+        for _, c in ipairs(scroll:GetChildren()) do
+            if c:IsA("TextLabel") then c:Destroy() end
+        end
+        for _, e in ipairs(State.console) do
+            local row = UI.label(scroll, ("[%s] %s"):format(e.time, e.msg),
+                UDim2.new(1, 0, 0, 16), nil, level_color(e.level))
+            row.Font = Enum.Font.Code
+            row.TextSize = math.max(9, State.config.FontSize - 2)
+            row.TextXAlignment = Enum.TextXAlignment.Left
+        end
+        task.defer(function()
+            scroll.CanvasPosition = Vector2.new(0, scroll.AbsoluteCanvasSize.Y)
+        end)
+    end
+
+    Console.on(function()
+        if State.active_page ~= "console" then return end
+        if State._refresh_console then State._refresh_console() end
+    end)
+
+    State._refresh_console()
+end
+
+-- ══════════════════════════════════════════════════════════════════════════
+--  [19] PAGE — SETTINGS
+-- ══════════════════════════════════════════════════════════════════════════
+do
+    local p = Pages.settings
+    U.pad(PAD + 2, PAD + 2, PAD + 2, PAD + 2, p)
+
+    local hl = UI.label(p, "Settings", UDim2.new(1, 0, 0, BTN_H), nil, Theme.text, nil, true)
+    hl.TextSize = math.max(12, math.floor(15 * SCALE) + 4)
+
+    local scroll = U.class("ScrollingFrame", {
+        Size = UDim2.new(1, 0, 1, -(BTN_H + 6)),
+        Position = UDim2.new(0, 0, 0, BTN_H + 6),
+        BackgroundTransparency = 1,
+        CanvasSize = UDim2.new(),
+        AutomaticCanvasSize = Enum.AutomaticSize.Y,
+        ScrollBarThickness = 3,
+        ScrollBarImageColor3 = Theme.border,
+    }, p)
+    U.list(Enum.FillDirection.Vertical, 6, scroll)
+
+    local function row(label, help, ctor)
+        local h = math.floor(56 * SCALE) + 20
+        local r = U.class("Frame", {
+            Size = UDim2.new(1, 0, 0, h),
+            BackgroundColor3 = Theme.surface,
+            BorderSizePixel = 0,
+        }, scroll)
+        U.corner(RADIUS, r)
+        U.stroke(Theme.border, 1, 0, r)
+        U.pad(8, 12, 8, 12, r)
+
+        UI.label(r, label, UDim2.new(1, 0, 0, 16), nil, Theme.text, nil, true)
+        local hh = UI.label(r, help, UDim2.new(1, 0, 0, 14),
+            UDim2.new(0, 0, 0, 18), Theme.text_mute)
+        hh.TextSize = math.max(9, State.config.FontSize - 3)
+
+        ctor(r)
+    end
+
+    row("Font size", "Global UI text size", function(r)
+        local box = UI.input(r, "12", UDim2.new(0, 56, 0, BTN_H),
+            UDim2.new(1, -56, 0, 20), function(v)
+            local n = tonumber(v)
+            if n and n >= 9 and n <= 20 then
+                State.config.FontSize = n
+                FS.save_config(State.config)
+                Notify("Saved", "Font size: " .. n, "ok")
+            end
+        end)
+        box.Text = tostring(State.config.FontSize)
+    end)
+
+    row("Webhook URL", "Discord webhook for events", function(r)
+        local box = UI.input(r, "https://discord.com/api/webhooks/...",
+            UDim2.new(1, 0, 0, BTN_H), UDim2.new(0, 0, 0, 20), function(v)
+            State.config.WebhookURL = v
+            FS.save_config(State.config)
+            Notify("Saved", "Webhook URL", "ok")
+        end)
+        box.Text = State.config.WebhookURL
+    end)
+
+    row("Enable webhook", "Push notifications to Discord", function(r)
+        local st = State.config.WebhookEnabled
+        local b = UI.button(r, st and "Enabled" or "Disabled",
+            UDim2.new(0, 88, 0, BTN_H), UDim2.new(0, 0, 0, 20),
+            st and Theme.green or Theme.red, function()
+            State.config.WebhookEnabled = not State.config.WebhookEnabled
+            FS.save_config(State.config)
+            b.Text = State.config.WebhookEnabled and "Enabled" or "Disabled"
+            b.BackgroundColor3 = State.config.WebhookEnabled and Theme.green or Theme.red
+        end)
+    end)
+
+    row("Test webhook", "Send a test embed", function(r)
+        UI.button(r, "Send", UDim2.new(0, 88, 0, BTN_H), UDim2.new(0, 0, 0, 20),
+            Theme.accent, function()
+            Webhook.send("Nexus test", "If you see this, webhook works.", 0x608CFF)
+            Notify("Sent", "Test webhook", "ok")
+        end)
+    end)
+
+    row("Reload UI", "Reinitialize the interface", function(r)
+        UI.button(r, "Reload", UDim2.new(0, 88, 0, BTN_H),
+            UDim2.new(0, 0, 0, 20), Theme.surface_3, function()
+            screen:Destroy()
+            getgenv().NEXUS_LOADED = nil
+            Notify("Reload", "Re-run the script", "warn")
+        end)
+    end)
+end
+
+-- ══════════════════════════════════════════════════════════════════════════
+--  [20] AUTO-EXEC
+-- ══════════════════════════════════════════════════════════════════════════
+task.spawn(function()
+    task.wait(1)
+    if not fs_ok() or type(listfiles) ~= "function" then return end
+    local auto_dir = FOLDER .. "/autoexec"
+    if not isfolder(auto_dir) then makefolder(auto_dir) end
+    local ok, files = pcall(listfiles, auto_dir)
+    if not ok or not files then return end
+    for _, file in ipairs(files) do
+        local path = auto_dir .. "/" .. file
+        if isfile(path) then task.spawn(function() Exec.run_file(path) end) end
+    end
+end)
+
+-- ══════════════════════════════════════════════════════════════════════════
+--  [21] KEYBIND
+-- ══════════════════════════════════════════════════════════════════════════
+UserInputService.InputBegan:Connect(function(input, processed)
+    if processed then return end
+    if input.KeyCode == Enum.KeyCode.RightShift then
+        root.Visible = not root.Visible
+        if getgenv().NexusToggle then
+            getgenv().NexusToggle.Visible = not root.Visible
+        end
+    end
+end)
+
+-- ══════════════════════════════════════════════════════════════════════════
+--  [22] INIT
+-- ══════════════════════════════════════════════════════════════════════════
+FS.init()
+FS.save_config(State.config)
+
+Console.info("Nexus v" .. VERSION .. " loaded")
+Console.info("Executor: " .. U.exec_name())
+
+task.spawn(function()
+    task.wait(0.6)
+    Notify("Nexus", "Loaded successfully", "ok")
+end)
+
+game:BindToClose(function()
+    FS.save_config(State.config)
+end)
+
+return true
