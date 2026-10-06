@@ -1,0 +1,3466 @@
+getgenv().AutoBountyConfig = {
+    Team = "Pirates",
+    Settings = {
+        SpectateTarget = false,
+        ESP = true,
+        CameraLock = true,
+        BigHitbox = true,
+        Aimbot = true,
+        FixLag = true,
+        SkipV4Player = true,
+        SkipFruit = {"Portal-Portal", "Buddha-Buddha", "Kitsune-Kitsune", "Dragon-Dragon", "Yeti-Yeti"},
+        LowHealth = {
+            Min = 4000,
+            Max = 6000,
+        },
+        Others = {
+            AutoAwakeningV4 = true,
+            AutoTurnRaceV3 = true,
+            AutoKen = true,
+        },
+    },
+    Weapon = {
+        Melee = {
+            Enabled = true,
+            Delay = 0.1,
+            Skills = {
+                Z = {Enabled = true, Hold = 0},
+                X = {Enabled = true, Hold = 0},
+                C = {Enabled = true, Hold = 0},
+            },
+        },
+        Sword = {
+            Enabled = true,
+            Delay = 0.1,
+            Skills = {
+                Z = {Enabled = true, Hold = 0},
+                X = {Enabled = true, Hold = 0},
+            },
+        },
+        Gun = {
+            Enabled = true,
+            Delay = 0.1,
+            Skills = {
+                Z = {Enabled = true, Hold = 0},
+                X = {Enabled = true, Hold = 0},
+            },
+        },
+        ["Blox Fruit"] = {
+            Enabled = true,
+            Delay = 0.1,
+            Skills = {
+                Z = {Enabled = true, Hold = 0},
+                X = {Enabled = true, Hold = 0},
+                C = {Enabled = true, Hold = 0},
+                V = {Enabled = false, Hold = 0},
+                F = {Enabled = true, Hold = 0},
+            },
+        },
+    },
+    Server = {
+        StopAtBounty = 0,
+        HopDelay = 5,
+        HopCooldown = 15,
+    },
+    Webhook = {
+        Enabled = false, -- Not working now.
+        Url = ""
+    },
+}
+repeat
+	task.wait()
+until game:IsLoaded()
+
+while true do
+	task.wait()
+	if not (game:GetService("Players") and game:GetService("Players").LocalPlayer) then
+		continue
+	end
+	break
+end
+
+local obj = setmetatable({}, { __index = function(arg, arg2)
+	return game:GetService(arg2)
+end })
+
+local players = obj.Players
+local replicatedStorage = obj.ReplicatedStorage
+local workspace = obj.Workspace
+local runService = obj.RunService
+local httpService = obj.HttpService
+local virtualInputManager = obj.VirtualInputManager
+local starterGui = obj.StarterGui
+local lighting = obj.Lighting
+local localPlayer = players.LocalPlayer
+local playerGui = localPlayer:WaitForChild("PlayerGui")
+local currentCamera = workspace.CurrentCamera
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local Workspace = game:GetService("Workspace")
+local localPlayer2 = Players.LocalPlayer
+
+if not localPlayer2 then
+	Players:GetPropertyChangedSignal("LocalPlayer"):Wait()
+	localPlayer2 = Players.LocalPlayer
+end
+
+local genv = type(getgenv) == "function" and getgenv() or _G
+
+local function fn()
+	local autoBountyConfig = type(genv.AutoBountyConfig) == "table" and genv.AutoBountyConfig or {}
+	return type(autoBountyConfig.Status) == "table" and autoBountyConfig.Status or {}
+end
+
+local tbl = {}
+local colorIslandGui = nil
+
+local tbl2 = {
+	SleepWidth = 56,
+	SleepDelay = 16,
+	DormantWidth = 148,
+	CompactWidth = 544,
+	ExpandedWidth = 544,
+	BarHeight = 56,
+	BarHeightDetail = 76,
+	TitleRow = 26,
+	DetailRow = 19,
+	TrackInset = 8,
+	CardBlock = 232,
+	TopOffset = 16,
+	MinimumScale = 0.4,
+	MaximumScale = 0.62,
+	HoldDuration = 1.8,
+	SuccessHold = 2.6,
+	ErrorHold = 3,
+	CardHold = 9,
+	LogLimit = 60,
+	QueueLimit = 12,
+	ReaderMinWidth = 280,
+	ReaderMaxWidth = 860,
+	ReaderMinHeight = 240,
+	ReaderMaxHeight = 560,
+	ReaderWidthRatio = 0.92,
+	ReaderHeightRatio = 0.8,
+	ReaderNarrowUnder = 520,
+	ReaderRowHeight = 34,
+	ReaderRowHeightNarrow = 38,
+}
+
+local tbl3 = {
+	Shell = Color3.fromRGB(0, 0, 0),
+	ShellTop = Color3.fromRGB(26, 26, 30),
+	ShellBottom = Color3.fromRGB(4, 4, 6),
+	Title = Color3.fromRGB(244, 244, 248),
+	Body = Color3.fromRGB(206, 206, 214),
+	Muted = Color3.fromRGB(132, 132, 142),
+	Hairline = Color3.fromRGB(255, 255, 255),
+	White = Color3.fromRGB(255, 255, 255),
+	Black = Color3.fromRGB(0, 0, 0),
+}
+
+local tbl4 = {
+	Info = { Color = Color3.fromRGB(94, 200, 255), Glyph = "Dot", Live = "Pulse", Priority = 2 },
+	Debug = { Color = Color3.fromRGB(142, 142, 152), Glyph = "Dot", Live = "Pulse", Priority = 1 },
+	Working = { Color = Color3.fromRGB(48, 209, 122), Glyph = "Spinner", Live = "Equalizer", Priority = 1 },
+	Travel = { Color = Color3.fromRGB(58, 140, 255), Glyph = "Spinner", Live = "Stream", Priority = 1 },
+	Trial = { Color = Color3.fromRGB(186, 104, 255), Glyph = "Spinner", Live = "Equalizer", Priority = 1 },
+	Combat = { Color = Color3.fromRGB(255, 148, 48), Glyph = "Spinner", Live = "Equalizer", Priority = 1 },
+	Waiting = { Color = Color3.fromRGB(255, 206, 42), Glyph = "Breath", Live = "Pulse", Priority = 2 },
+	Warning = { Color = Color3.fromRGB(255, 206, 42), Glyph = "Bang", Live = "Pulse", Priority = 3 },
+	Success = { Color = Color3.fromRGB(48, 209, 122), Glyph = "Check", Live = "Pulse", Priority = 4 },
+	Error = { Color = Color3.fromRGB(255, 82, 74), Glyph = "Cross", Live = "Pulse", Priority = 5 },
+}
+
+local function fn2(arg, arg2, arg3)
+	return { Value = arg, Target = arg, Velocity = 0, Stiffness = arg2, Damping = arg3 }
+end
+
+local function fn3(arg, arg2)
+	local n = math.min(arg2, 0.1)
+
+	while n > 0 do
+		local n2 = math.min(0.0041666666666666666, n)
+		arg.Velocity = arg.Velocity + ((arg.Target - arg.Value) * arg.Stiffness + -arg.Velocity * arg.Damping) * n2
+		arg.Value = arg.Value + arg.Velocity * n2
+		n -= n2
+	end
+end
+
+local function createUICorner(parent, cornerRadius)
+	local uiCorner = Instance.new("UICorner")
+	uiCorner.CornerRadius = cornerRadius
+	uiCorner.Parent = parent
+	return uiCorner
+end
+
+local function createFrame(parent, name, zIndex)
+	local frame = Instance.new("Frame")
+	frame.Name = name
+	frame.BackgroundColor3 = tbl3.White
+	frame.BorderSizePixel = 0
+	frame.ZIndex = zIndex or 2
+	frame.Parent = parent
+	return frame
+end
+
+local function createTextLabel(parent, name, font, textSize, textColor3, textXAlignment, zIndex)
+	local textLabel = Instance.new("TextLabel")
+	textLabel.Name = name
+	textLabel.AutoLocalize = false
+	textLabel.BackgroundTransparency = 1
+	textLabel.Font = font
+	textLabel.Text = ""
+	textLabel.TextSize = textSize
+	textLabel.TextColor3 = textColor3
+	textLabel.TextXAlignment = textXAlignment
+	textLabel.TextYAlignment = Enum.TextYAlignment.Center
+	textLabel.TextTruncate = Enum.TextTruncate.AtEnd
+	textLabel.ZIndex = zIndex or 4
+	textLabel.Parent = parent
+	return textLabel
+end
+
+local function fn4(arg, arg2, arg3)
+	return arg:Lerp(arg2, arg3)
+end
+
+local function fn5(arg)
+	local n = math.max(math.floor(arg), 0)
+	local n2 = math.floor(n / 3600)
+	local n3 = math.floor(n % 3600 / 60)
+	local n4 = n % 60
+	if n2 > 0 then
+		return string.format("%d:%02d:%02d", n2, n3, n4)
+	end
+	return string.format("%02d:%02d", n3, n4)
+end
+
+local function fn6(arg, arg2, arg3)
+	return string.format("%d %s", arg, arg == 1 and arg2 or arg3)
+end
+
+local function fn7()
+	local ok, result = pcall(function()
+		return DateTime.now():FormatLocalTime("HH:mm:ss", "en-us")
+	end)
+
+	if ok and typeof(result) == "string" then
+		return result
+	end
+	return "--:--:--"
+end
+
+tbl.Build = function()
+    local status = fn()
+    local accentColor = typeof(status.AccentColor) == "Color3"
+        and status.AccentColor
+        or Color3.fromRGB(72, 150, 255)
+
+    local oldGui = playerGui:FindFirstChild("ColorIslandGui")
+    if oldGui then
+        oldGui:Destroy()
+    end
+
+    local gui = Instance.new("ScreenGui")
+    gui.Name = "ColorIslandGui"
+    gui.ResetOnSpawn = false
+    gui.IgnoreGuiInset = true
+    gui.DisplayOrder = 999
+    gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    gui.Parent = playerGui
+    colorIslandGui = gui
+
+    -- UI cố định: không kéo thả.
+    local main = Instance.new("Frame")
+    main.Name = "Main"
+    main.AnchorPoint = Vector2.new(0.5, 0)
+    main.Position = UDim2.new(0.5, 0, 0, 22)
+    main.Size = UDim2.new(0, 500, 0, 278)
+    main.BackgroundColor3 = Color3.fromRGB(12, 15, 22)
+    main.BorderSizePixel = 0
+    main.Parent = gui
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 18)
+    corner.Parent = main
+
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = accentColor
+    stroke.Transparency = 0.28
+    stroke.Thickness = 1.2
+    stroke.Parent = main
+
+    local gradient = Instance.new("UIGradient")
+    gradient.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(25, 30, 43)),
+        ColorSequenceKeypoint.new(0.55, Color3.fromRGB(14, 18, 27)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(8, 10, 16))
+    })
+    gradient.Rotation = 115
+    gradient.Parent = main
+
+    local glow = Instance.new("Frame")
+    glow.BackgroundColor3 = accentColor
+    glow.BackgroundTransparency = 0.82
+    glow.BorderSizePixel = 0
+    glow.Position = UDim2.fromOffset(18, 14)
+    glow.Size = UDim2.new(1, -36, 0, 3)
+    glow.ZIndex = 3
+    glow.Parent = main
+
+    local glowCorner = Instance.new("UICorner")
+    glowCorner.CornerRadius = UDim.new(1, 0)
+    glowCorner.Parent = glow
+
+    local title = Instance.new("TextLabel")
+    title.BackgroundTransparency = 1
+    title.Position = UDim2.fromOffset(20, 25)
+    title.Size = UDim2.new(1, -150, 0, 28)
+    title.Font = Enum.Font.GothamBold
+    title.Text = "TIRO AUTO BOUNTY"
+    title.TextColor3 = Color3.fromRGB(247, 249, 255)
+    title.TextSize = 19
+    title.TextXAlignment = Enum.TextXAlignment.Left
+    title.Parent = main
+
+    local subtitle = Instance.new("TextLabel")
+    subtitle.BackgroundTransparency = 1
+    subtitle.Position = UDim2.fromOffset(21, 52)
+    subtitle.Size = UDim2.new(1, -170, 0, 18)
+    subtitle.Font = Enum.Font.Gotham
+    subtitle.Text = "AUTO PVP  •  NORMAL TWEEN"
+    subtitle.TextColor3 = Color3.fromRGB(130, 139, 157)
+    subtitle.TextSize = 9
+    subtitle.TextXAlignment = Enum.TextXAlignment.Left
+    subtitle.Parent = main
+
+    local statusBadge = Instance.new("Frame")
+    statusBadge.AnchorPoint = Vector2.new(1, 0)
+    statusBadge.Position = UDim2.new(1, -20, 0, 28)
+    statusBadge.Size = UDim2.fromOffset(112, 30)
+    statusBadge.BackgroundColor3 = Color3.fromRGB(22, 30, 35)
+    statusBadge.BorderSizePixel = 0
+    statusBadge.Parent = main
+
+    local badgeCorner = Instance.new("UICorner")
+    badgeCorner.CornerRadius = UDim.new(0, 10)
+    badgeCorner.Parent = statusBadge
+
+    local badgeStroke = Instance.new("UIStroke")
+    badgeStroke.Color = accentColor
+    badgeStroke.Transparency = 0.62
+    badgeStroke.Parent = statusBadge
+
+    local statusDot = Instance.new("Frame")
+    statusDot.Position = UDim2.fromOffset(11, 11)
+    statusDot.Size = UDim2.fromOffset(8, 8)
+    statusDot.BackgroundColor3 = accentColor
+    statusDot.BorderSizePixel = 0
+    statusDot.Parent = statusBadge
+
+    local dotCorner = Instance.new("UICorner")
+    dotCorner.CornerRadius = UDim.new(1, 0)
+    dotCorner.Parent = statusDot
+
+    local statusLabel = Instance.new("TextLabel")
+    statusLabel.BackgroundTransparency = 1
+    statusLabel.Position = UDim2.fromOffset(26, 0)
+    statusLabel.Size = UDim2.new(1, -31, 1, 0)
+    statusLabel.Font = Enum.Font.GothamBold
+    statusLabel.Text = "RUNNING"
+    statusLabel.TextColor3 = accentColor
+    statusLabel.TextSize = 9
+    statusLabel.TextXAlignment = Enum.TextXAlignment.Left
+    statusLabel.Parent = statusBadge
+
+    local line = Instance.new("Frame")
+    line.BorderSizePixel = 0
+    line.BackgroundColor3 = Color3.fromRGB(39, 45, 57)
+    line.Position = UDim2.fromOffset(20, 82)
+    line.Size = UDim2.new(1, -40, 0, 1)
+    line.Parent = main
+
+    local stats = Instance.new("Frame")
+    stats.BackgroundTransparency = 1
+    stats.Position = UDim2.fromOffset(20, 98)
+    stats.Size = UDim2.new(1, -40, 0, 100)
+    stats.Parent = main
+
+    local layout = Instance.new("UIGridLayout")
+    layout.CellPadding = UDim2.fromOffset(10, 10)
+    layout.CellSize = UDim2.new(0.5, -5, 0, 45)
+    layout.Parent = stats
+
+    local labels = {}
+
+    local function makeStat(key, name, icon)
+        local card = Instance.new("Frame")
+        card.BackgroundColor3 = Color3.fromRGB(23, 28, 38)
+        card.BorderSizePixel = 0
+        card.Parent = stats
+
+        local cardCorner = Instance.new("UICorner")
+        cardCorner.CornerRadius = UDim.new(0, 11)
+        cardCorner.Parent = card
+
+        local cardStroke = Instance.new("UIStroke")
+        cardStroke.Color = Color3.fromRGB(55, 63, 78)
+        cardStroke.Transparency = 0.55
+        cardStroke.Parent = card
+
+        local iconLabel = Instance.new("TextLabel")
+        iconLabel.BackgroundTransparency = 1
+        iconLabel.Position = UDim2.fromOffset(11, 0)
+        iconLabel.Size = UDim2.fromOffset(22, 45)
+        iconLabel.Font = Enum.Font.GothamBold
+        iconLabel.Text = icon
+        iconLabel.TextColor3 = accentColor
+        iconLabel.TextSize = 13
+        iconLabel.Parent = card
+
+        local nameLabel = Instance.new("TextLabel")
+        nameLabel.BackgroundTransparency = 1
+        nameLabel.Position = UDim2.fromOffset(39, 6)
+        nameLabel.Size = UDim2.new(1, -48, 0, 13)
+        nameLabel.Font = Enum.Font.GothamMedium
+        nameLabel.Text = name
+        nameLabel.TextColor3 = Color3.fromRGB(125, 134, 151)
+        nameLabel.TextSize = 8
+        nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+        nameLabel.Parent = card
+
+        local valueLabel = Instance.new("TextLabel")
+        valueLabel.BackgroundTransparency = 1
+        valueLabel.Position = UDim2.fromOffset(39, 19)
+        valueLabel.Size = UDim2.new(1, -48, 0, 19)
+        valueLabel.Font = Enum.Font.GothamBold
+        valueLabel.Text = "--"
+        valueLabel.TextColor3 = Color3.fromRGB(239, 242, 249)
+        valueLabel.TextSize = 11
+        valueLabel.TextXAlignment = Enum.TextXAlignment.Left
+        valueLabel.Parent = card
+
+        labels[key] = valueLabel
+    end
+
+    makeStat("Bounty", "BOUNTY", "B")
+    makeStat("Earned", "EARNED", "+")
+    makeStat("Kills", "KILLS", "K")
+    makeStat("Server", "SERVER", "S")
+
+    local targetCard = Instance.new("Frame")
+    targetCard.Position = UDim2.fromOffset(20, 210)
+    targetCard.Size = UDim2.new(1, -40, 0, 42)
+    targetCard.BackgroundColor3 = Color3.fromRGB(19, 24, 33)
+    targetCard.BorderSizePixel = 0
+    targetCard.Parent = main
+
+    local targetCorner = Instance.new("UICorner")
+    targetCorner.CornerRadius = UDim.new(0, 11)
+    targetCorner.Parent = targetCard
+
+    local targetStroke = Instance.new("UIStroke")
+    targetStroke.Color = Color3.fromRGB(55, 63, 78)
+    targetStroke.Transparency = 0.62
+    targetStroke.Parent = targetCard
+
+    local targetTitle = Instance.new("TextLabel")
+    targetTitle.BackgroundTransparency = 1
+    targetTitle.Position = UDim2.fromOffset(12, 4)
+    targetTitle.Size = UDim2.new(0, 70, 0, 13)
+    targetTitle.Font = Enum.Font.GothamBold
+    targetTitle.Text = "TARGET"
+    targetTitle.TextColor3 = accentColor
+    targetTitle.TextSize = 8
+    targetTitle.TextXAlignment = Enum.TextXAlignment.Left
+    targetTitle.Parent = targetCard
+
+    local targetLabel = Instance.new("TextLabel")
+    targetLabel.BackgroundTransparency = 1
+    targetLabel.Position = UDim2.fromOffset(12, 17)
+    targetLabel.Size = UDim2.new(1, -24, 0, 18)
+    targetLabel.Font = Enum.Font.GothamMedium
+    targetLabel.Text = "No target"
+    targetLabel.TextColor3 = Color3.fromRGB(218, 222, 232)
+    targetLabel.TextSize = 10
+    targetLabel.TextXAlignment = Enum.TextXAlignment.Left
+    targetLabel.TextTruncate = Enum.TextTruncate.AtEnd
+    targetLabel.Parent = targetCard
+
+    local info = Instance.new("TextLabel")
+    info.BackgroundTransparency = 1
+    info.Position = UDim2.fromOffset(20, 258)
+    info.Size = UDim2.new(1, -40, 0, 14)
+    info.Font = Enum.Font.Gotham
+    info.Text = "ESP  •  CAMERA LOCK  •  HITBOX  •  AIMBOT  •  FIX LAG"
+    info.TextColor3 = Color3.fromRGB(92, 101, 119)
+    info.TextSize = 7
+    info.TextXAlignment = Enum.TextXAlignment.Left
+    info.Parent = main
+
+    local events = {}
+
+    local function bind(name, callback)
+        local event = Instance.new("BindableEvent")
+        event.Name = name
+        event.Event:Connect(function(...)
+            pcall(callback, ...)
+        end)
+        event.Parent = gui
+        events[name] = event
+    end
+
+    bind("AddLog", function(message)
+        if typeof(message) == "string" then
+            local clean = string.upper(message:sub(1, 18))
+            statusLabel.Text = clean ~= "" and clean or "RUNNING"
+        end
+    end)
+
+    bind("UpdateCurrentStep", function(message)
+        if typeof(message) == "string" and message ~= "" then
+            targetLabel.Text = "Status: " .. message:sub(1, 55)
+        end
+    end)
+
+    bind("UpdateProgress", function() end)
+    bind("UpdateRetry", function() end)
+    bind("UpdateRecovery", function() end)
+
+    bind("UpdateTheme", function(color)
+        if typeof(color) == "Color3" then
+            accentColor = color
+            stroke.Color = color
+            badgeStroke.Color = color
+            statusDot.BackgroundColor3 = color
+            statusLabel.TextColor3 = color
+            targetTitle.TextColor3 = color
+        end
+    end)
+
+    bind("ResetSession", function()
+        statusLabel.Text = "RUNNING"
+        statusLabel.TextColor3 = accentColor
+        statusDot.BackgroundColor3 = accentColor
+    end)
+
+    bind("CompleteSession", function()
+        statusLabel.Text = "STOPPED"
+        statusLabel.TextColor3 = Color3.fromRGB(255, 190, 90)
+        statusDot.BackgroundColor3 = Color3.fromRGB(255, 190, 90)
+    end)
+
+    bind("DestroyUI", function()
+        if gui.Parent then
+            gui:Destroy()
+        end
+    end)
+
+    local function formatNumber(value)
+        value = tonumber(value) or 0
+        local numberText = tostring(math.floor(value))
+        while true do
+            local replaced, count = numberText:gsub("^(%-?%d+)(%d%d%d)", "%1,%2")
+            numberText = replaced
+            if count == 0 then
+                break
+            end
+        end
+        return numberText
+    end
+
+    local connection
+    connection = RunService.RenderStepped:Connect(function()
+        if not gui.Parent then
+            connection:Disconnect()
+            return
+        end
+
+        local bounty = 0
+        pcall(function()
+            bounty = autoBounty and autoBounty.GetBounty() or 0
+        end)
+
+        local startBounty = 0
+        pcall(function()
+            startBounty = autoBountyRuntime and autoBountyRuntime.StartBounty or 0
+        end)
+
+        local earned = math.max(0, bounty - startBounty)
+
+        local kills = 0
+        pcall(function()
+            kills = autoBountyRuntime and autoBountyRuntime.Kills or 0
+        end)
+
+        labels.Bounty.Text = formatNumber(bounty)
+        labels.Earned.Text = "+" .. formatNumber(earned)
+        labels.Kills.Text = formatNumber(kills)
+        labels.Server.Text = game.JobId ~= ""
+            and game.JobId:sub(1, 10) .. "..."
+            or "N/A"
+
+        local target = autoBountyRuntime and autoBountyRuntime.Target
+
+        if target and target.Parent then
+            local targetBounty = 0
+
+            pcall(function()
+                local targetData = target:FindFirstChild("Data")
+                local stat = targetData
+                    and (targetData:FindFirstChild("Bounty")
+                    or targetData:FindFirstChild("Honor"))
+
+                targetBounty = stat and tonumber(stat.Value) or 0
+            end)
+
+            targetLabel.Text = string.format(
+                "%s  •  Bounty %s",
+                target.Name,
+                formatNumber(targetBounty)
+            )
+        elseif autoBountyRuntime and autoBountyRuntime.Hopping then
+            targetLabel.Text = "Server hopping..."
+        else
+            targetLabel.Text = "No target"
+        end
+    end)
+
+    gui.Destroying:Connect(function()
+        if connection then
+            connection:Disconnect()
+        end
+    end)
+
+    return true
+end
+
+tbl.Start = function()
+    if colorIslandGui and colorIslandGui.Parent then
+        return true, nil
+    end
+    local ok, result = pcall(tbl.Build)
+    if not ok then
+        return false, "Tiro UI failed to load: " .. tostring(result)
+    end
+    return true, nil
+end
+
+tbl.Fire = function(name, ...)
+    if not colorIslandGui or not colorIslandGui.Parent then
+        return false
+    end
+    local event = colorIslandGui:FindFirstChild(name)
+    if not event or not event:IsA("BindableEvent") then
+        return false
+    end
+    return pcall(event.Fire, event, ...)
+end
+
+tbl.Log = function(message, level)
+    return tbl.Fire("AddLog", tostring(message), level)
+end
+
+tbl.Step = function(message)
+    return tbl.Fire("UpdateCurrentStep", tostring(message or ""))
+end
+
+tbl.Progress = function(value)
+    return tbl.Fire("UpdateProgress", value)
+end
+
+tbl.Retry = function(a, b)
+    return tbl.Fire("UpdateRetry", a, b)
+end
+
+tbl.Recovery = function(a, b)
+    return tbl.Fire("UpdateRecovery", tostring(a), b)
+end
+
+tbl.Theme = function(color)
+    return tbl.Fire("UpdateTheme", color)
+end
+
+tbl.Reset = function()
+    return tbl.Fire("ResetSession")
+end
+
+tbl.Complete = function()
+    return tbl.Fire("CompleteSession")
+end
+
+tbl.Destroy = function()
+    return tbl.Fire("DestroyUI")
+end
+
+local v = tbl
+
+local function fn8(...)
+	local v2 = table.pack(...)
+
+	for i = 1, v2.n do
+		v2[i] = tostring(v2[i])
+	end
+
+	return table.concat(v2, " ", 1, v2.n)
+end
+
+local function fn9(arg, ...)
+	local v2 = fn8(...)
+	print("[AutoBounty]", v2)
+	v.Log(v2, arg)
+	return v2
+end
+
+local function fn10(...)
+	local v2 = fn8(...)
+	print("[AutoBounty]", v2)
+	v.Step(v2)
+	return v2
+end
+
+local function fn11(...)
+	local v2 = table.pack(...)
+	return fn9("Info", table.unpack(v2, 1, v2.n))
+end
+
+local v2, v3 = v.Start()
+
+if not v2 then
+	warn("[AutoBounty] status ui failed:", v3)
+end
+
+local function fn12()
+	local autoBountyConfig = (type(getgenv) == "function" and getgenv() or _G).AutoBountyConfig
+	local str = "Pirates"
+
+	if type(autoBountyConfig) == "table" and type(autoBountyConfig.Team) == "string" and autoBountyConfig.Team ~= "" then
+		str = autoBountyConfig.Team
+	end
+
+	if localPlayer.Team then
+		fn11("team already", tostring(localPlayer.Team))
+		return true
+	end
+	local remotes = replicatedStorage:WaitForChild("Remotes", 30)
+	remotes = remotes and remotes:WaitForChild("CommF_", 30)
+	if not remotes then
+		fn9("Error", "join team failed, no CommF_")
+		return false
+	end
+
+	for i = 1, 100 do
+		pcall(function()
+			local main = playerGui:FindFirstChild("Main")
+			main = main and main:FindFirstChild("ChooseTeam")
+			main = main and main:FindFirstChild("Container")
+			main = main and main:FindFirstChild(str)
+			main = main and main:FindFirstChild("Frame")
+			main = main and main:FindFirstChild("TextButton")
+
+			if main and type(getconnections) == "function" then
+				for _, v4 in pairs(getconnections(main.Activated)) do
+					v4.Function()
+				end
+			end
+
+			remotes:InvokeServer("SetTeam", str)
+		end)
+
+		task.wait(0.3)
+		if localPlayer.Team then
+			fn9("Success", "team joined", tostring(localPlayer.Team), i)
+			return true
+		end
+	end
+
+	fn9("Warning", "join team timed out, wanted", str)
+	return false
+end
+
+fn12()
+local character = localPlayer.Character or localPlayer.CharacterAdded:Wait()
+local humanoid = character:WaitForChild("Humanoid")
+local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
+
+localPlayer.CharacterAdded:Connect(function(character2)
+	character = character2
+	humanoid = character2:WaitForChild("Humanoid")
+	humanoidRootPart = character2:WaitForChild("HumanoidRootPart")
+end)
+
+local tbl5 = {}
+
+local function fn13(arg, arg2, arg3)
+	if not arg then
+		tbl5[#tbl5 + 1] = tostring(arg2)
+		return nil
+	end
+	local v4 = arg:WaitForChild(arg2, arg3 or 10)
+
+	if not v4 then
+		tbl5[#tbl5 + 1] = arg:GetFullName() .. "." .. arg2
+	end
+
+	return v4
+end
+
+local data = fn13(localPlayer, "Data")
+fn13(data, "Level")
+local v4 = fn13(fn13(localPlayer, "leaderstats"), "Bounty/Honor")
+local remotes = fn13(replicatedStorage, "Remotes")
+local commF = fn13(remotes, "CommF_")
+local commE = fn13(remotes, "CommE")
+local modules = fn13(replicatedStorage, "Modules")
+fn13(modules, "Net")
+fn13(workspace, "Map")
+fn13(workspace, "NPCs")
+fn13(workspace, "Characters")
+local v5 = fn13(workspace, "_WorldOrigin")
+local safeZones = fn13(v5, "SafeZones")
+local attribute = workspace:GetAttribute("MAP")
+local jobId = game.JobId
+
+if #tbl5 > 0 then
+	fn9("Warning", "missing instances:", table.concat(tbl5, ", "))
+end
+
+fn11("stage 1 - instances resolved")
+local genv2 = type(getgenv) == "function" and getgenv() or _G
+
+local tbl6 = {
+	Enabled = false,
+	Team = "Pirates",
+	Debug = false,
+	Settings = {
+		SpectateTarget = false,
+		ESP = true,
+		CameraLock = true,
+		BigHitbox = true,
+		Aimbot = true,
+		FixLag = true,
+		NoCooldown = true,
+		SkipV4Player = true,
+		SkipFruit = {
+			"Portal-Portal",
+			"Buddha-Buddha",
+			"Kitsune-Kitsune",
+			"Dragon-Dragon",
+			"Pain-Pain",
+			"Ice-Ice",
+			"Dough-Dough",
+			"T-Rex-T-Rex",
+			"Yeti-Yeti",
+		},
+		LevelBand = 0.75,
+		LowHealth = { Min = 4000, Max = 6000 },
+		Others = { AutoAwakeningV4 = true, AutoTurnRaceV3 = true, AutoKen = true },
+	},
+	Weapon = {
+		Melee = {
+			Enabled = true,
+			Delay = 0.1,
+			Skills = {
+				Z = { Enabled = true, Hold = 0 },
+				X = { Enabled = true, Hold = 0 },
+				C = { Enabled = true, Hold = 0 },
+			},
+		},
+		Sword = {
+			Enabled = true,
+			Delay = 0.1,
+			Skills = { Z = { Enabled = true, Hold = 0 }, X = { Enabled = true, Hold = 0 } },
+		},
+		Gun = {
+			Enabled = true,
+			Delay = 0.1,
+			Skills = { Z = { Enabled = true, Hold = 0 }, X = { Enabled = true, Hold = 0 } },
+		},
+		["Blox Fruit"] = {
+			Enabled = true,
+			Delay = 0.1,
+			Skills = {
+				Z = { Enabled = true, Hold = 0 },
+				X = { Enabled = true, Hold = 0 },
+				C = { Enabled = true, Hold = 0 },
+				V = { Enabled = false, Hold = 0 },
+				F = { Enabled = true, Hold = 0 },
+			},
+		},
+	},
+	Server = { StopAtBounty = 0, HopDelay = 5, HopCooldown = 15 },
+	Webhook = { Enabled = false, Url = "" },
+	Status = {
+		AccentColor = Color3.fromRGB(58, 140, 255),
+		AnimationSpeed = 1,
+		ReduceMotion = false,
+		Transparency = 0,
+	},
+}
+
+local fn14 = nil
+
+fn14 = function(arg, arg2)
+	for k, v6 in pairs(arg2) do
+		if type(v6) == "table" and #v6 == 0 then
+			if type(arg[k]) ~= "table" then
+				arg[k] = {}
+			end
+
+			fn14(arg[k], v6)
+		elseif arg[k] == nil then
+			arg[k] = v6
+		end
+	end
+
+	return arg
+end
+
+local autoBountyConfig = type(genv2.AutoBountyConfig) == "table" and genv2.AutoBountyConfig or {}
+fn14(autoBountyConfig, tbl6)
+genv2.AutoBountyConfig = autoBountyConfig
+fn11("stage 2 - config ready, team:", tostring(autoBountyConfig.Team))
+local autoBounty = {}
+
+local autoBountyRuntime = {
+	Active = false,
+	Connection = nil,
+	Job = nil,
+	WatcherConnections = {},
+	Target = nil,
+	TargetClock = 0,
+	NextScanClock = 0,
+	NextAttackClock = 0,
+	NextHopClock = 0,
+	StartBounty = 0,
+	Kills = 0,
+	Targets = {},
+	Blacklisted = {},
+	Deaths = {},
+	Motion = setmetatable({}, { __mode = "k" }),
+	NoClipParts = {},
+	Rejects = {},
+	LastReject = nil,
+	LastThreat = nil,
+	CombatLabel = nil,
+	LastTargetHealth = 0,
+	LastOwnHealth = 0,
+	SafeZoneParts = {},
+	SafeZoneCount = -1,
+	Areas = {},
+	AreaCount = -1,
+	SkipFruits = {},
+	SkipFruitSource = nil,
+	SkipFruitCount = -1,
+	Tweening = false,
+	TweenNumber = 0,
+	LastCFrame = nil,
+	NoTargetClock = 0,
+	NextRaceClock = 0,
+	NextPvpClock = 0,
+	NextBusoClock = 0,
+	NextKenClock = 0,
+	NextHeartbeat = 0,
+	NextHitboxClock = 0,
+	NextCombatLog = 0,
+	IdleGoalY = 0,
+	LastGlide = 0,
+	DiveUntil = 0,
+	NextDive = 0,
+	Panic = false,
+	Hooked = false,
+	AimHits = 0,
+	Hits = 0,
+	MeleePatched = false,
+	CooldownPatched = false,
+	Global = nil,
+	AttackMelee = nil,
+	Controller = nil,
+	AntiAfk = nil,
+	Hopping = false,
+	NotifyConnection = nil,
+	ESP = nil,
+	ESPConnection = nil,
+	EffectConnection = nil,
+	CameraConnection = nil,
+	NextEntranceClock = 0,
+}
+
+local autoBountyRuntime2 = genv2.AutoBountyRuntime
+
+if type(autoBountyRuntime2) == "table" then
+	autoBountyRuntime2.Active = false
+
+	for _, v6 in ipairs({ "NotifyConnection", "ESPConnection", "EffectConnection", "CameraConnection", "AntiAfk" }) do
+		pcall(function()
+			autoBountyRuntime2[v6]:Disconnect()
+		end)
+	end
+
+	if type(autoBountyRuntime2.ESP) == "table" then
+		for _, v6 in pairs(autoBountyRuntime2.ESP) do
+			pcall(function()
+				v6:Remove()
+			end)
+		end
+	end
+
+	fn11("stopped previous instance")
+end
+
+genv2.AutoBountyRuntime = autoBountyRuntime
+
+local function fn15(...)
+	if autoBountyConfig.Debug then
+		print("[AutoBounty]", ...)
+	end
+end
+
+local tbl7 = { "Z", "X", "C", "V", "F" }
+local tbl8 = { "Melee", "Sword", "Gun", "Blox Fruit" }
+local tbl9 = { Melee = true, Sword = true, ["Demon Fruit"] = true }
+local tbl10 = { Fishman = true }
+local tbl11 = { ["prehistoric island"] = true, ["kitsune island"] = true }
+local tbl12 = { Marines = true }
+local tbl13 = { RemoteEvent = true, LeftClickRemote = true }
+local tbl14 = { underwater = true, toohigh = true }
+
+local tbl15 = {
+	BodyVelocity = true,
+	BodyGyro = true,
+	BodyPosition = true,
+	AlignPosition = true,
+	AlignOrientation = true,
+	LinearVelocity = true,
+	VectorForce = true,
+}
+
+local tbl16 = {
+	ParticleEmitter = true,
+	Trail = true,
+	Beam = true,
+	Smoke = true,
+	Fire = true,
+	Sparkles = true,
+	ForceField = true,
+	Explosion = true,
+	Highlight = true,
+	PointLight = true,
+	SpotLight = true,
+	SurfaceLight = true,
+}
+
+local n = 0.25
+local n2 = 70
+local n3 = 0.35
+local n4 = 4
+local color = Color3.fromRGB(255, 255, 255)
+local n5 = 5
+local n6 = 50
+local n7 = 25
+local n8 = 3500
+local n9 = 2000
+local n10 = 10000
+local n11 = 5
+local n12 = 1000
+local hitboxMagnitude = 45
+local str = "RE/RegisterAttack"
+local n13 = 0.8
+local n14 = 2
+local n15 = 250
+local n16 = 1
+local n17 = 20
+local tbl17 = { "Fist of Darkness", "God's Chalice", "Sweet Chalice" }
+
+local v6 = ({
+	Sea1 = {
+		["Sky Arena 1"] = Vector3.new(-4654, 872, -1759),
+		["Sky Arena 2"] = Vector3.new(-7894, 5547, -380),
+		["UnderWater City 1"] = Vector3.new(3876, 35, -1939),
+		["UnderWater City 2"] = Vector3.new(61163, 11, 1819),
+	},
+	Sea2 = {
+		Mansion = Vector3.new(-288, 305, 613),
+		["Swan Room"] = Vector3.new(2284, 15, 897),
+		["Out Ship"] = Vector3.new(-6518, 83, -145),
+		["In Ship"] = Vector3.new(923, 125, 32883),
+	},
+	Sea3 = {
+		Mansion = Vector3.new(-12550, 337, -7476),
+		["Castle On The Sea"] = Vector3.new(-5073, 314, -3152),
+		["Hydra Island"] = Vector3.new(5681, 1013, -313),
+		["Temple Of Time"] = Vector3.new(28294, 14896, 103),
+	},
+})[attribute]
+
+fn11("sea:", tostring(attribute), "portals:", v6 ~= nil)
+local n18 = 10
+local n19 = 200
+local cframe = CFrame.new(0, 25, 0)
+local cframe2 = CFrame.new(0, 2, 2)
+local n20 = 55
+local n21 = 3.5
+local n22 = 320
+local n23 = 0.45
+local n24 = 0.6
+local n25 = 4500
+local cframe3 = CFrame.new(0, 50, 0)
+local n26 = 90000
+local n27 = 0.45
+local n28 = 8
+local n29 = 30
+local n30 = -500
+local n31 = 13000
+local n32 = 5
+local huge = math.huge
+local n33 = 12
+local n34 = 100
+local n35 = 3636
+local n36 = 900
+local n37 = 0.25
+local n38 = 0.9
+local n39 = 12
+local n40 = 30
+local n41 = 5
+local n42 = 3
+local n43 = 0.5
+local n44 = 3
+local color2 = Color3.fromRGB(255, 255, 255)
+local thickness = 1.5
+local size = 14
+local n45 = 0.55
+local vector = Vector3.new(0, 3, 0)
+local vector2 = Vector3.new(0, 3.5, 0)
+
+autoBounty.ToCFrame = function(arg)
+	local kind = typeof(arg)
+	if kind == "CFrame" then
+		return arg
+	end
+
+	if kind == "Vector3" then
+		return CFrame.new(arg)
+	end
+
+	if kind == "Instance" then
+		if arg:IsA("BasePart") then
+			return arg.CFrame
+		end
+
+		if arg:IsA("Model") then
+			return arg:GetPivot()
+		end
+	end
+
+	return nil
+end
+
+autoBounty.GetAliveParts = function(arg)
+	if not arg or not arg.Parent then
+		return nil
+	end
+	local humanoid2 = arg:FindFirstChildOfClass("Humanoid")
+	if not humanoid2 or humanoid2.Health <= 0 then
+		return nil
+	end
+	local humanoidRootPart2 = arg:FindFirstChild("HumanoidRootPart")
+	if not humanoidRootPart2 then
+		return nil
+	end
+	return humanoid2, humanoidRootPart2
+end
+
+autoBounty.IsAlive = function(arg)
+	return autoBounty.GetAliveParts(arg) ~= nil
+end
+
+autoBounty.GetBounty = function()
+	return v4 and v4.Value or 0
+end
+
+autoBounty.GetLevel = function(arg, arg2)
+	local data2 = arg2 or arg and arg:FindFirstChild("Data")
+	data2 = data2 and data2:FindFirstChild("Level")
+	if not data2 then
+		return 0
+	end
+	return tonumber(data2.Value) or 0
+end
+
+autoBounty.InLevelBand = function(arg)
+	local levelBand = autoBountyConfig.Settings.LevelBand
+	if type(levelBand) ~= "number" or levelBand <= 0 or levelBand >= 1 then
+		return true
+	end
+	local v7 = autoBounty.GetLevel(localPlayer, data)
+	if v7 <= 0 or arg <= 0 then
+		return true
+	end
+	return arg >= v7 * levelBand and arg <= v7 / levelBand
+end
+
+autoBounty.GetSafeZoneParts = function()
+	local safeZoneParts = autoBountyRuntime.SafeZoneParts
+	if not safeZones then
+		return safeZoneParts
+	end
+	local children = safeZones:GetChildren()
+
+	if #children ~= autoBountyRuntime.SafeZoneCount then
+		table.clear(safeZoneParts)
+
+		for i = 1, #children do
+			local v7 = children[i]
+
+			if v7:IsA("BasePart") then
+				safeZoneParts[#safeZoneParts + 1] = v7
+			elseif v7:IsA("Model") then
+				local primaryPart = v7.PrimaryPart or v7:FindFirstChildWhichIsA("BasePart")
+
+				if primaryPart then
+					safeZoneParts[#safeZoneParts + 1] = primaryPart
+				end
+			end
+		end
+
+		autoBountyRuntime.SafeZoneCount = #children
+		fn11("safe zones:", #safeZoneParts)
+	end
+
+	return safeZoneParts
+end
+
+autoBounty.InSafeZone = function(arg)
+	local v7 = autoBounty.GetSafeZoneParts()
+
+	for i = 1, #v7 do
+		local v8 = v7[i]
+
+		if v8.Parent then
+			local v9 = v8.CFrame:PointToObjectSpace(arg)
+			local size2 = v8.Size
+			local n46 = size2.X * 0.5 + n6
+			local flag = math.abs(v9.X) <= n46
+
+			if flag then
+				local n47 = size2.Z * 0.5 + n6
+				flag = math.abs(v9.Z) <= n47
+			end
+
+			if flag then
+				local n47 = size2.Y * 0.5 + n6
+				flag = math.abs(v9.Y) <= n47
+			end
+
+			if flag then
+				return true
+			end
+		end
+	end
+
+	return false
+end
+
+autoBounty.GetAreas = function()
+	local areas = autoBountyRuntime.Areas
+	local locations = v5 and v5:FindFirstChild("Locations")
+	if not locations then
+		return areas
+	end
+	local children = locations:GetChildren()
+
+	if #children ~= autoBountyRuntime.AreaCount then
+		table.clear(areas)
+
+		for i = 1, #children do
+			local v7 = children[i]
+			local mesh = v7:FindFirstChild("Mesh")
+
+			if mesh and v7:IsA("BasePart") then
+				local x = mesh.Scale.X
+				areas[#areas + 1] = { Name = v7.Name, Position = v7.Position, RadiusSquared = x * x }
+			end
+		end
+
+		autoBountyRuntime.AreaCount = #children
+		fn11("areas:", #areas)
+	end
+
+	return areas
+end
+
+autoBounty.InArea = function(arg)
+	local v7 = autoBounty.GetAreas()
+
+	for i = 1, #v7 do
+		local v8 = v7[i]
+		local n46 = v8.Position - arg
+		if n46.X * n46.X + n46.Y * n46.Y + n46.Z * n46.Z <= v8.RadiusSquared then
+			return v8.Name
+		end
+	end
+
+	return nil
+end
+autoBounty.IsBlockedArea = function(arg)
+	if not arg then
+		return false
+	end
+	local v7 = string.lower(arg)
+	return tbl11[v7] == true or string.find(v7, "trial") ~= nil
+end
+
+autoBounty.GetSkipFruits = function()
+	local skipFruit = autoBountyConfig.Settings.SkipFruit
+	if type(skipFruit) ~= "table" then
+		return nil
+	end
+
+	if autoBountyRuntime.SkipFruitSource ~= skipFruit or #skipFruit ~= autoBountyRuntime.SkipFruitCount then
+		table.clear(autoBountyRuntime.SkipFruits)
+
+		for i = 1, #skipFruit do
+			autoBountyRuntime.SkipFruits[skipFruit[i]] = true
+		end
+
+		autoBountyRuntime.SkipFruitSource = skipFruit
+		autoBountyRuntime.SkipFruitCount = #skipFruit
+	end
+
+	return autoBountyRuntime.SkipFruits
+end
+
+autoBounty.GetFruitName = function(arg, arg2, arg3)
+	local data2 = arg3 or arg:FindFirstChild("Data")
+	data2 = data2 and data2:FindFirstChild("DevilFruit")
+	if data2 and data2.Value ~= "" then
+		return data2.Value
+	end
+	local children = arg2:GetChildren()
+
+	for i = 1, #children do
+		local v7 = children[i]
+		if v7:IsA("Tool") and v7.ToolTip == "Blox Fruit" then
+			return v7.Name
+		end
+	end
+
+	return nil
+end
+
+autoBounty.HasThreatNearby = function(arg, arg2)
+	local v7 = autoBounty.GetSkipFruits()
+	if not v7 then
+		return false
+	end
+	local players2 = players:GetPlayers()
+
+	for i = 1, #players2 do
+		local v8 = players2[i]
+
+		if v8 ~= localPlayer and v8 ~= arg2 then
+			local character2 = v8.Character
+			local v9, v10 = autoBounty.GetAliveParts(character2)
+
+			if v9 then
+				local n46 = v10.Position - arg
+				if not (n46.X * n46.X + n46.Y * n46.Y + n46.Z * n46.Z <= n26) then
+					continue
+				end
+				local v11 = autoBounty.GetFruitName(v8, character2)
+				if v11 and v7[v11] then
+					return true, v8.Name, v11
+				end
+			end
+		end
+	end
+
+	return false
+end
+
+autoBounty.HasBodyMover = function(arg)
+	local tbl18 = {}
+	local humanoidRootPart2 = arg:FindFirstChild("HumanoidRootPart")
+	local head = arg:FindFirstChild("Head")
+	local torso = arg:FindFirstChild("Torso") or arg:FindFirstChild("UpperTorso")
+	tbl18[1] = humanoidRootPart2
+	tbl18[2] = head
+	tbl18[3] = torso
+
+	for i = 1, #tbl18 do
+		local v7 = tbl18[i]
+
+		if v7 then
+			local children = v7:GetChildren()
+
+			for i2 = 1, #children do
+				local v8 = children[i2]
+				if tbl15[v8.ClassName] then
+					return true, v8.ClassName
+				end
+			end
+		end
+	end
+
+	return false
+end
+
+autoBounty.TrackMotion = function(arg, arg2)
+	local v7 = autoBountyRuntime.Motion[arg]
+	local now = os.clock()
+
+	if not v7 then
+		local tbl18 = { Position = arg2.Position, Clock = now, Score = 0 }
+		autoBountyRuntime.Motion[arg] = tbl18
+		return tbl18
+	end
+
+	local n46 = now - v7.Clock
+	if n46 < n then
+		return v7
+	end
+	local n47 = (arg2.Position - v7.Position).Magnitude / n46
+
+	if n47 >= n2 and (arg2.AssemblyLinearVelocity or arg2.Velocity).Magnitude <= n47 * n3 then
+		v7.Score = math.min(v7.Score + 1, 8)
+	else
+		v7.Score = math.max(v7.Score - 1, 0)
+	end
+
+	v7.Position = arg2.Position
+	v7.Clock = now
+	return v7
+end
+
+autoBounty.IsLikelyBot = function(arg, arg2, arg3)
+	local v7, v8 = autoBounty.HasBodyMover(arg2)
+	if v7 then
+		return true, v8
+	end
+
+	if n4 <= autoBounty.TrackMotion(arg, arg3).Score then
+		return true, "teleporting"
+	end
+	return false
+end
+
+autoBounty.GetTeamName = function()
+	if localPlayer.Team then
+		return localPlayer.Team.Name
+	end
+	return autoBountyConfig.Team
+end
+
+autoBounty.HasItem = function(arg)
+	local backpack = localPlayer:FindFirstChild("Backpack")
+	if backpack and backpack:FindFirstChild(arg) then
+		return true
+	end
+	return character ~= nil and character:FindFirstChild(arg) ~= nil
+end
+
+autoBounty.GetSpawnFolder = function()
+	local playerSpawns = v5 and v5:FindFirstChild("PlayerSpawns")
+	if not playerSpawns then
+		return nil
+	end
+	local v7 = autoBounty.GetTeamName()
+	return v7 and playerSpawns:FindFirstChild(v7) or playerSpawns:FindFirstChild("Pirates")
+end
+
+autoBounty.GetPortal = function(arg)
+	if not v6 then
+		return nil
+	end
+
+	if attribute == "Sea3" and not autoBounty.HasItem("Valkyrie Helm") then
+		return nil
+	end
+	local v7, v8 = autoBounty.GetAliveParts(character)
+	if not v8 then
+		return nil
+	end
+	local huge2 = math.huge
+	local v9 = nil
+
+	for _, v10 in pairs(v6) do
+		local magnitude = (v10 - arg).Magnitude
+
+		if magnitude <= huge2 then
+			huge2 = magnitude
+			v9 = v10
+		end
+	end
+
+	if v9 and huge2 + n15 <= (arg - v8.Position).Magnitude then
+		return v9
+	end
+	return nil
+end
+
+autoBounty.GetCombatLabel = function()
+	local combatLabel = autoBountyRuntime.CombatLabel
+	if combatLabel and combatLabel.Parent then
+		return combatLabel
+	end
+	local main = playerGui:FindFirstChild("Main")
+	if not main then
+		return nil
+	end
+	local bottomHUDList = main:FindFirstChild("BottomHUDList")
+	bottomHUDList = bottomHUDList and bottomHUDList:FindFirstChild("InCombat") or main:FindFirstChild("InCombat") or main:FindFirstChild("InCombat", true)
+	autoBountyRuntime.CombatLabel = bottomHUDList
+
+	if bottomHUDList then
+		fn11("combat label:", bottomHUDList:GetFullName())
+	end
+
+	return bottomHUDList
+end
+
+autoBounty.IsFighting = function()
+	local v7 = autoBounty.GetCombatLabel()
+	return v7 ~= nil and v7.Visible and v7.Text:lower():find("risk!")
+end
+
+autoBounty.InCombat = function()
+	return autoBounty.IsFighting()
+end
+
+autoBounty.RequestEntrance = function(arg)
+	local flag = not commF
+
+	if not flag then
+		local nextEntranceClock = autoBountyRuntime.NextEntranceClock
+		flag = os.clock() - nextEntranceClock < n16
+	end
+
+	if flag then
+		return false
+	end
+
+	if autoBounty.InCombat() then
+		return false
+	end
+	autoBountyRuntime.NextEntranceClock = os.clock()
+	local floor = math.floor
+	local z = arg.Z
+	fn9("Travel", "entrance", math.floor(arg.X), floor(z))
+
+	pcall(function()
+		commF:InvokeServer("requestEntrance", arg)
+	end)
+
+	return true
+end
+
+autoBounty.BlacklistTarget = function(arg, arg2, arg3)
+	if not arg then
+		return false
+	end
+
+	if arg3 == huge then
+		autoBountyRuntime.Blacklisted[arg] = huge
+	else
+		autoBountyRuntime.Blacklisted[arg] = os.clock() + (arg3 or 45)
+	end
+
+	autoBountyRuntime.Deaths[arg] = nil
+
+	if autoBountyRuntime.Target == arg then
+		autoBountyRuntime.Target = nil
+	end
+
+	fn9("Warning", "skip", arg.Name, "reason:", arg2 or "unknown")
+	return true
+end
+
+autoBounty.ClearBlacklist = function()
+	local blacklisted = autoBountyRuntime.Blacklisted
+	local n46 = 0
+
+	for k, v7 in pairs(blacklisted) do
+		if v7 ~= huge then
+			blacklisted[k] = nil
+			n46 += 1
+		end
+	end
+
+	return n46
+end
+
+autoBounty.Reject = function(lastReject)
+	local rejects = autoBountyRuntime.Rejects
+	rejects[lastReject] = (rejects[lastReject] or 0) + 1
+	autoBountyRuntime.LastReject = lastReject
+	return nil
+end
+
+autoBounty.FormatRejects = function()
+	local tbl18 = {}
+
+	for k, reject in pairs(autoBountyRuntime.Rejects) do
+		tbl18[#tbl18 + 1] = k .. "=" .. reject
+	end
+
+	if #tbl18 == 0 then
+		return "none"
+	end
+	table.sort(tbl18)
+	return table.concat(tbl18, " ")
+end
+
+autoBounty.IsValidTarget = function(arg, arg2, arg3, arg4)
+	if arg == localPlayer or not arg.Parent then
+		return nil
+	end
+	local v7 = autoBountyRuntime.Blacklisted[arg]
+
+	if v7 then
+		if os.clock() < v7 then
+			return autoBounty.Reject("blacklist")
+		end
+		autoBountyRuntime.Blacklisted[arg] = nil
+	end
+
+	if arg:GetAttribute("PvpDisabled") then
+		return autoBounty.Reject("pvpdisabled")
+	end
+
+	if arg:GetAttribute("IslandRaiding") then
+		return autoBounty.Reject("raiding")
+	end
+
+	if arg4 and tbl12[arg4] and arg.Team and arg.Team.Name == arg4 then
+		return autoBounty.Reject("sameteam")
+	end
+	local character2 = arg.Character
+	local v8, v9 = autoBounty.GetAliveParts(character2)
+	if not v8 then
+		return autoBounty.Reject("dead")
+	end
+
+	if v8.Sit then
+		return autoBounty.Reject("sitting")
+	end
+
+	if v9.Position.Y <= n30 then
+		autoBounty.BlacklistTarget(arg, "underwater")
+		return autoBounty.Reject("underwater")
+	end
+
+	if v9.Position.Y >= n31 then
+		autoBounty.BlacklistTarget(arg, "too high")
+		return autoBounty.Reject("toohigh")
+	end
+	local n46 = v9.Position - arg2
+	local n47 = n46.X * n46.X + n46.Y * n46.Y + n46.Z * n46.Z
+	if arg3 < n47 then
+		return autoBounty.Reject("range")
+	end
+	local settings = autoBountyConfig.Settings
+	local raceTransformed = character2:FindFirstChild("RaceTransformed")
+	if settings.SkipV4Player and raceTransformed and raceTransformed.Value then
+		return autoBounty.Reject("v4")
+	end
+	local data2 = arg:FindFirstChild("Data")
+	local race = data2 and data2:FindFirstChild("Race")
+	if race and tbl10[race.Value] then
+		return autoBounty.Reject("race")
+	end
+
+	if not autoBounty.InLevelBand(autoBounty.GetLevel(arg, data2)) then
+		return autoBounty.Reject("level")
+	end
+	local v10 = autoBounty.GetSkipFruits()
+
+	if v10 then
+		local v11 = autoBounty.GetFruitName(arg, character2, data2)
+		if v11 and v10[v11] then
+			return autoBounty.Reject("fruit")
+		end
+	end
+
+	if autoBounty.InSafeZone(v9.Position) then
+		return autoBounty.Reject("safezone")
+	end
+	local v11 = autoBounty.InArea(v9.Position)
+	if autoBounty.IsBlockedArea(v11) then
+		return autoBounty.Reject("area")
+	end
+	local v12, v13, v14 = autoBounty.HasThreatNearby(v9.Position, arg)
+	if v12 then
+		autoBountyRuntime.LastThreat = v13 .. " " .. v14
+		return autoBounty.Reject("threat")
+	end
+	return v8, v9, n47
+end
+
+autoBounty.GetTargets = function(arg)
+	local targets = autoBountyRuntime.Targets
+	table.clear(targets)
+	local v7, v8 = autoBounty.GetAliveParts(character)
+	if not v8 then
+		return targets
+	end
+	local position = v8.Position
+	arg = arg or 15000
+	local n46 = arg * arg
+	local v9 = autoBounty.GetTeamName()
+	local players2 = players:GetPlayers()
+
+	for i = 1, #players2 do
+		local v10 = players2[i]
+		local v11, v12, v13 = autoBounty.IsValidTarget(v10, position, n46, v9)
+
+		if v11 then
+			targets[#targets + 1] = {
+				Player = v10,
+				Character = v10.Character,
+				Humanoid = v11,
+				Root = v12,
+				Distance = math.sqrt(v13),
+			}
+		end
+	end
+
+	table.sort(targets, function(arg2, arg3)
+		return arg2.Distance < arg3.Distance
+	end)
+
+	return targets
+end
+
+autoBounty.GetTarget = function(arg)
+	local v7, v8 = autoBounty.GetAliveParts(character)
+	if not v8 then
+		autoBountyRuntime.Target = nil
+		return nil
+	end
+	local position = v8.Position
+	arg = arg or 15000
+	local n46 = arg * arg
+	local v9 = autoBounty.GetTeamName()
+	local target = autoBountyRuntime.Target
+
+	if target then
+		autoBountyRuntime.LastReject = nil
+		local v10, v11 = autoBounty.IsValidTarget(target, position, n46, v9)
+		if v10 then
+			return target, v11, v10
+		end
+		local lastReject = autoBountyRuntime.LastReject or "unknown"
+
+		if lastReject == "dead" then
+			local n47 = (autoBountyRuntime.Deaths[target] or 0) + 1
+			autoBountyRuntime.Deaths[target] = n47
+
+			if n32 <= n47 then
+				autoBounty.BlacklistTarget(target, "died " .. n47 .. "x")
+			else
+				fn9("Waiting", "skip", target.Name, "reason: dead", n47 .. "/" .. n32)
+			end
+		elseif lastReject == "threat" then
+			fn9("Warning", "skip", target.Name, "reason: threat", autoBountyRuntime.LastThreat or "?")
+		elseif not tbl14[lastReject] then
+			fn9("Warning", "skip", target.Name, "reason:", lastReject)
+		end
+
+		autoBountyRuntime.Target = nil
+	end
+
+	table.clear(autoBountyRuntime.Rejects)
+	local players2 = players:GetPlayers()
+	local huge2 = math.huge
+	local v10 = nil
+	local v11 = nil
+	local v12 = nil
+
+	for i = 1, #players2 do
+		local v13 = players2[i]
+		local v14, v15, v16 = autoBounty.IsValidTarget(v13, position, n46, v9)
+
+		if v14 and v16 < huge2 then
+			huge2 = v16
+			v10 = v13
+			v11 = v15
+			v12 = v14
+		end
+	end
+
+	autoBountyRuntime.Target = v10
+	autoBountyRuntime.TargetClock = os.clock()
+
+	if v10 then
+		local v13, v14 = autoBounty.IsLikelyBot(v10, v10.Character, v11)
+		autoBountyRuntime.LastTargetHealth = v12.Health
+		autoBountyRuntime.LastOwnHealth = 0
+		fn9("Combat", "new target", v10.Name, "lv" .. autoBounty.GetLevel(v10), math.floor(math.sqrt(huge2)) .. " studs", v13 and "bot? " .. v14 or "")
+	end
+
+	return v10, v11, v12
+end
+
+autoBounty.NoStun = function()
+	local humanoidRootPart2 = character and character:FindFirstChild("HumanoidRootPart")
+	if not humanoidRootPart2 then
+		return false
+	end
+	local children = humanoidRootPart2:GetChildren()
+
+	for i = 1, #children do
+		local v7 = children[i]
+
+		if v7.Name == "BodyGyro" or v7.Name == "BodyPosition" then
+			v7:Destroy()
+		end
+	end
+
+	return true
+end
+
+autoBounty.UseNoClip = function()
+	if not character then
+		return false
+	end
+	local noClipParts = autoBountyRuntime.NoClipParts
+	if #noClipParts > 0 then
+		return true
+	end
+	local descendants = character:GetDescendants()
+
+	for i = 1, #descendants do
+		local v7 = descendants[i]
+
+		if v7:IsA("BasePart") and v7.CanCollide then
+			v7.CanCollide = false
+			noClipParts[#noClipParts + 1] = v7
+		end
+	end
+
+	return true
+end
+
+autoBounty.AddBodyVelocity = function(arg)
+	local v7, v8 = autoBounty.GetAliveParts(character)
+	if not v7 then
+		return false
+	end
+	local head = character:FindFirstChild("Head") or v8
+
+	if arg then
+		if v7.Sit then
+			v7.Sit = false
+		end
+
+		if not head:FindFirstChild("BodyVelocity") then
+			local bodyVelocity = Instance.new("BodyVelocity")
+			bodyVelocity.Name = "BodyVelocity"
+			bodyVelocity.MaxForce = Vector3.new(40000, 40000, 40000)
+			bodyVelocity.Velocity = Vector3.zero
+			bodyVelocity.P = 15000
+			bodyVelocity.Parent = head
+		end
+
+		return true
+	end
+
+	local bodyVelocity = head:FindFirstChild("BodyVelocity")
+
+	if bodyVelocity then
+		bodyVelocity:Destroy()
+	end
+
+	local noClipParts = autoBountyRuntime.NoClipParts
+
+	for i = #noClipParts, 1, -1 do
+		local v9 = noClipParts[i]
+
+		if v9 and v9.Parent then
+			v9.CanCollide = true
+		end
+
+		noClipParts[i] = nil
+	end
+
+	return true
+end
+
+autoBounty.PrepareCharacter = function()
+	autoBounty.AddBodyVelocity(true)
+	autoBounty.UseNoClip()
+	return true
+end
+
+autoBounty.StopTween = function()
+	autoBountyRuntime.Tweening = false
+	autoBountyRuntime.TweenNumber = autoBountyRuntime.TweenNumber + 1
+	autoBountyRuntime.LastCFrame = nil
+end
+
+autoBounty.Tweento = function(arg, arg2)
+	local v7 = autoBounty.ToCFrame(arg)
+	if not v7 then
+		return false
+	end
+	local v8, v9 = autoBounty.GetAliveParts(character)
+	if not v8 then
+		autoBountyRuntime.Tweening = false
+		return false
+	end
+	local lastCFrame = autoBountyRuntime.LastCFrame
+	if autoBountyRuntime.Tweening and lastCFrame and (lastCFrame.Position - v7.Position).Magnitude <= n18 then
+		return true
+	end
+	local magnitude = (v7.Position - v9.Position).Magnitude
+	if magnitude <= 0 then
+		return true
+	end
+	autoBounty.NoStun()
+	autoBounty.PrepareCharacter()
+	autoBountyRuntime.TweenNumber = autoBountyRuntime.TweenNumber + 1
+	autoBountyRuntime.LastCFrame = v7
+	autoBountyRuntime.Tweening = true
+	local tweenNumber = autoBountyRuntime.TweenNumber
+	local cFrame = v9.CFrame
+	local n46 = arg2 or 300
+	local n47 = 0
+
+	task.spawn(function()
+		while autoBountyRuntime.Tweening and autoBountyRuntime.TweenNumber == tweenNumber and n47 < magnitude and v9.Parent and v8.Health > 0 do
+			n47 += n46 * task.wait()
+			v9.CFrame = cFrame:Lerp(v7, math.clamp(n47 / magnitude, 0, 1))
+		end
+
+		if autoBountyRuntime.TweenNumber == tweenNumber then
+			autoBountyRuntime.Tweening = false
+			autoBountyRuntime.LastCFrame = nil
+		end
+	end)
+
+	return true
+end
+
+autoBounty.Travel = function(arg, arg2)
+	local v7 = autoBounty.ToCFrame(arg)
+	if not v7 then
+		return false
+	end
+	local v8, v9 = autoBounty.GetAliveParts(character)
+	if not v9 then
+		return false
+	end
+	local position = v7.Position
+	local magnitude = (position - v9.Position).Magnitude
+
+	if magnitude <= n7 then
+		autoBounty.StopTween()
+		v9.CFrame = v7
+		return true
+	end
+
+	local v10 = autoBounty.GetPortal(position)
+	if v10 then
+		autoBounty.RequestEntrance(v10)
+		return true
+	end
+	return autoBounty.Tweento(v7, arg2)
+end
+
+autoBounty.GetWeaponName = function(arg)
+	local backpack = localPlayer:FindFirstChild("Backpack")
+
+	if backpack then
+		local children = backpack:GetChildren()
+
+		for i = 1, #children do
+			local v7 = children[i]
+			if v7:IsA("Tool") and v7.ToolTip == arg then
+				return v7.Name
+			end
+		end
+	end
+
+	if character then
+		local tool = character:FindFirstChildOfClass("Tool")
+		if tool and tool.ToolTip == arg then
+			return tool.Name
+		end
+	end
+
+	return nil
+end
+
+autoBounty.EquipWeapon = function(arg)
+	local v7 = autoBounty.GetWeaponName(arg)
+	if not v7 then
+		return false
+	end
+
+	if character and character:FindFirstChild(v7) then
+		return true
+	end
+	local backpack = localPlayer:FindFirstChild("Backpack")
+	backpack = backpack and backpack:FindFirstChild(v7)
+	if backpack and humanoid then
+		humanoid:EquipTool(backpack)
+		return true
+	end
+	return false
+end
+
+autoBounty.GetSkill = function(arg)
+	local v7 = autoBountyConfig.Weapon[arg]
+	if not v7 or not v7.Enabled then
+		return nil
+	end
+	local v8 = autoBounty.GetWeaponName(arg)
+	if not v8 then
+		return nil
+	end
+	local main = playerGui:FindFirstChild("Main")
+	main = main and main:FindFirstChild("Skills")
+	main = main and main:FindFirstChild(v8)
+
+	for i = 1, #tbl7 do
+		local v9 = tbl7[i]
+		local v10 = v7.Skills[v9]
+
+		if v10 and v10.Enabled then
+			if not main then
+				return v9, v10.Hold or 0, false
+			end
+			local title = main:FindFirstChild(v9)
+			local cooldown = title and title:FindFirstChild("Cooldown")
+			title = title and title:FindFirstChild("Title")
+			if cooldown and title and cooldown.AbsoluteSize.X <= n5 and title.TextColor3 == color then
+				return v9, v10.Hold or 0, true
+			end
+		end
+	end
+
+	return nil
+end
+
+autoBounty.GetReadyWeapon = function()
+	for i = 1, #tbl8 do
+		local v7 = tbl8[i]
+		local v8, v9, v10 = autoBounty.GetSkill(v7)
+		if v8 then
+			return v7, v8, v9, v10
+		end
+	end
+
+	return nil
+end
+
+autoBounty.SendKey = function(arg, arg2)
+	if not arg then
+		return false
+	end
+
+	if type(set_thread_identity) == "function" then
+		pcall(set_thread_identity, 8)
+	end
+
+	task.spawn(function()
+		virtualInputManager:SendKeyEvent(true, arg, false, game)
+
+		if arg2 and arg2 > 0 then
+			task.wait(arg2)
+		else
+			task.wait()
+		end
+
+		virtualInputManager:SendKeyEvent(false, arg, false, game)
+	end)
+
+	return true
+end
+
+autoBounty.Notify = function(arg, arg2)
+	fn15(arg, arg2)
+	v.Log(arg2, "Info")
+
+	pcall(function()
+		starterGui:SetCore("SendNotification", { Title = arg, Text = arg2, Duration = 4 })
+	end)
+end
+
+autoBounty.CheckNotify = function(arg)
+	local notifications = playerGui:FindFirstChild("Notifications")
+	if not notifications then
+		return nil
+	end
+	local children = notifications:GetChildren()
+	local v7 = string.lower(arg)
+
+	for i = 1, #children do
+		local v8 = children[i]
+		if v8:IsA("TextLabel") and v8.Text and string.find(string.lower(v8.Text), v7) then
+			return v8
+		end
+	end
+
+	return nil
+end
+
+autoBounty.FindPlayerByName = function(arg)
+	if not arg or arg == "" then
+		return nil
+	end
+	local players2 = players:GetPlayers()
+
+	for i = 1, #players2 do
+		if players2[i].Name == arg then
+			return players2[i]
+		end
+	end
+
+	return nil
+end
+
+autoBounty.ReadNotification = function(arg)
+	if not arg:IsA("TextLabel") or not arg.Text or arg.Text == "" then
+		return false
+	end
+	local text = arg.Text
+	local v7 = string.match(text, "from killing%s+([%w_]+)")
+
+	if v7 then
+		autoBountyRuntime.Kills = autoBountyRuntime.Kills + 1
+		fn9("Success", "killed", v7, "total:", autoBountyRuntime.Kills)
+		autoBounty.UpdateProgress()
+		autoBounty.SendWebhook(autoBounty.FindPlayerByName(v7))
+		local target = autoBountyRuntime.Target
+
+		if target and target.Name == v7 then
+			autoBountyRuntime.Target = nil
+			autoBounty.StopTween()
+		end
+
+		return true
+	end
+
+	local v8 = string.match(text, "from dying to%s+([%w_]+)")
+
+	if v8 then
+		local v9 = autoBounty.FindPlayerByName(v8)
+		fn9("Error", "died to", v8)
+
+		if v9 then
+			autoBounty.BlacklistTarget(v9, "killed me", 600)
+		end
+
+		autoBounty.StopTween()
+		return true
+	end
+
+	return false
+end
+
+autoBounty.WatchNotifications = function()
+	if autoBountyRuntime.NotifyConnection then
+		return false
+	end
+	local notifications = playerGui:FindFirstChild("Notifications")
+	if not notifications then
+		return false
+	end
+
+	autoBountyRuntime.NotifyConnection = notifications.ChildAdded:Connect(function(child)
+		task.defer(function()
+			pcall(autoBounty.ReadNotification, child)
+		end)
+	end)
+
+	fn11("watching notifications")
+	return true
+end
+
+autoBounty.IsHudVisible = function(arg)
+	local main = playerGui:FindFirstChild("Main")
+	local bottomHUDList = main and main:FindFirstChild("BottomHUDList")
+	bottomHUDList = bottomHUDList and bottomHUDList:FindFirstChild(arg) or main and main:FindFirstChild(arg)
+	return bottomHUDList ~= nil and bottomHUDList.Visible
+end
+
+autoBounty.FireRemote = function(...)
+	if not commF then
+		return false
+	end
+	local v7 = table.pack(...)
+
+	task.spawn(function()
+		pcall(function()
+			commF:InvokeServer(table.unpack(v7, 1, v7.n))
+		end)
+	end)
+
+	return true
+end
+
+autoBounty.EnablePvp = function()
+	local nextPvpClock = autoBountyRuntime.NextPvpClock
+	if os.clock() - nextPvpClock < n42 then
+		return false
+	end
+
+	if not autoBounty.IsHudVisible("PvpDisabled") then
+		return false
+	end
+	autoBountyRuntime.NextPvpClock = os.clock()
+	return autoBounty.FireRemote("EnablePvp")
+end
+
+autoBounty.EnableBuso = function()
+	local nextBusoClock = autoBountyRuntime.NextBusoClock
+	if os.clock() - nextBusoClock < n41 then
+		return false
+	end
+
+	if not character or character:FindFirstChild("HasBuso") then
+		return false
+	end
+	autoBountyRuntime.NextBusoClock = os.clock()
+	return autoBounty.FireRemote("Buso")
+end
+
+autoBounty.GetObservation = function()
+	local global = autoBountyRuntime.Global
+
+	if not global then
+		global = autoBounty.RequireModule(replicatedStorage:FindFirstChild("Global"))
+		if type(global) ~= "table" then
+			return nil
+		end
+		autoBountyRuntime.Global = global
+	end
+
+	local om = global.OM
+	if type(om) ~= "table" then
+		return nil
+	end
+	return om
+end
+
+autoBounty.IsKenActive = function()
+	local v7 = autoBounty.GetObservation()
+	if v7 then
+		return v7.active == true
+	end
+	local events = replicatedStorage:FindFirstChild("Events")
+	local isObservationActive = events and events:FindFirstChild("IsObservationActive")
+	if not isObservationActive then
+		return false
+	end
+
+	local ok, result = pcall(function()
+		return isObservationActive:Invoke()
+	end)
+
+	return ok and result == true
+end
+
+autoBounty.ActiveKen = function()
+	local others = autoBountyConfig.Settings.Others
+	if not others or not others.AutoKen or not commE then
+		return false
+	end
+	local nextKenClock = autoBountyRuntime.NextKenClock
+	if os.clock() - nextKenClock < n43 then
+		return false
+	end
+
+	if not character or character:FindFirstChild("KenDisabled") then
+		return false
+	end
+
+	if not autoBounty.GetAliveParts(character) then
+		return false
+	end
+
+	local ok, result = pcall(function()
+		return character:HasTag("Ken")
+	end)
+
+	if ok and not result then
+		return false
+	end
+
+	if autoBounty.IsKenActive() then
+		return false
+	end
+	local v7 = autoBounty.GetObservation()
+	if not v7 then
+		return false
+	end
+	autoBountyRuntime.NextKenClock = os.clock()
+
+	pcall(function()
+		v7:setActive(true)
+		local visionRadius = localPlayer:FindFirstChild("VisionRadius")
+
+		if visionRadius then
+			v7.radius = visionRadius.Value
+		end
+
+		commE:FireServer("Ken", true)
+	end)
+
+	return true
+end
+
+autoBounty.TurnRace = function()
+	local others = autoBountyConfig.Settings.Others
+	if not others or not character then
+		return false
+	end
+
+	if others.AutoAwakeningV4 then
+		local raceEnergy = character:FindFirstChild("RaceEnergy")
+		local raceTransformed = character:FindFirstChild("RaceTransformed")
+
+		if raceEnergy and raceTransformed and raceEnergy.Value >= 1 and not raceTransformed.Value then
+			task.spawn(function()
+				pcall(function()
+					local backpack = localPlayer:FindFirstChild("Backpack")
+					backpack = backpack and backpack:FindFirstChild("Awakening")
+
+					if backpack and backpack:FindFirstChild("RemoteFunction") then
+						backpack.RemoteFunction:InvokeServer(true)
+					end
+				end)
+			end)
+		end
+	end
+
+	local autoTurnRaceV3 = others.AutoTurnRaceV3 and commE
+
+	if autoTurnRaceV3 then
+		local nextRaceClock = autoBountyRuntime.NextRaceClock
+		autoTurnRaceV3 = os.clock() - nextRaceClock >= 1
+	end
+
+	if autoTurnRaceV3 then
+		autoBountyRuntime.NextRaceClock = os.clock()
+
+		pcall(function()
+			commE:FireServer("ActivateAbility")
+		end)
+	end
+
+	return true
+end
+
+autoBounty.SetTeam = function()
+	local team = autoBountyConfig.Team
+	if not team or team == "" then
+		return true
+	end
+
+	if localPlayer.Team and localPlayer.Team.Name == team then
+		return true
+	end
+
+	for i = 1, 10 do
+		pcall(function()
+			local main = playerGui:FindFirstChild("Main")
+			main = main and main:FindFirstChild("ChooseTeam")
+			main = main and main:FindFirstChild("Container")
+			main = main and main:FindFirstChild(team)
+			main = main and main:FindFirstChild("Frame")
+			main = main and main:FindFirstChild("TextButton")
+
+			if main and type(getconnections) == "function" then
+				for _, v7 in pairs(getconnections(main.Activated)) do
+					v7.Function()
+				end
+			else
+				commF:InvokeServer("SetTeam", team)
+			end
+		end)
+
+		task.wait(0.3)
+		if localPlayer.Team and localPlayer.Team.Name == team then
+			fn9("Success", "team set", team, i)
+			return true
+		end
+	end
+
+	fn9("Warning", "team not set, current:", tostring(localPlayer.Team))
+	return false
+end
+
+autoBounty.UpdateCamera = function(cameraSubject)
+	if not autoBountyConfig.Settings.SpectateTarget then
+		if currentCamera.CameraSubject ~= humanoid and humanoid then
+			currentCamera.CameraSubject = humanoid
+		end
+
+		return false
+	end
+
+	if cameraSubject == nil then
+		if currentCamera.CameraSubject ~= humanoid and humanoid then
+			currentCamera.CameraSubject = humanoid
+			return true
+		end
+	end
+
+	cameraSubject = cameraSubject and cameraSubject:FindFirstChildOfClass("Humanoid")
+	if cameraSubject and currentCamera.CameraSubject ~= cameraSubject then
+		currentCamera.CameraSubject = cameraSubject
+		return true
+	end
+	return true
+end
+
+autoBounty.HandlePanic = function()
+	local lowHealth = autoBountyConfig.Settings.LowHealth
+	local v7, v8 = autoBounty.GetAliveParts(character)
+	if type(lowHealth) ~= "table" or not v7 then
+		autoBountyRuntime.Panic = false
+		return false
+	end
+	local maxHealth = v7.MaxHealth
+	local health = v7.Health
+	local n46 = math.min(lowHealth.Min or 0, maxHealth * n37)
+	local n47 = math.min(lowHealth.Max or 0, maxHealth * n38)
+
+	if autoBountyRuntime.Panic then
+		if health >= n47 then
+			autoBountyRuntime.Panic = false
+			local floor = math.floor
+			fn9("Success", "panic off", math.floor(health), "/", floor(n47))
+			return false
+		end
+	else
+		if not (health < n46) then
+			return false
+		end
+		autoBountyRuntime.Panic = true
+		local floor = math.floor
+		fn9("Warning", "panic on", math.floor(health), "/", floor(n46))
+	end
+
+	autoBounty.StopTween()
+	autoBounty.PrepareCharacter()
+	local target = autoBountyRuntime.Target
+	local v9, position = autoBounty.GetAliveParts(target and target.Character)
+	position = position and position.Position or v8.Position
+	v8.CFrame = CFrame.new(position.X, position.Y + n35, position.Z)
+	return true
+end
+
+autoBounty.BigHitbox = function()
+	if not autoBountyConfig.Settings.BigHitbox then
+		return false
+	end
+	local nextHitboxClock = autoBountyRuntime.NextHitboxClock
+	if os.clock() - nextHitboxClock < n14 then
+		return false
+	end
+	autoBountyRuntime.NextHitboxClock = os.clock()
+	return autoBounty.PatchMeleeData()
+end
+
+autoBounty.RequireModule = function(arg)
+	if not arg or not arg:IsA("ModuleScript") then
+		return nil
+	end
+	local ok, result = pcall(require, arg)
+	return ok and result or nil
+end
+
+autoBounty.PatchMeleeData = function()
+	if autoBountyRuntime.MeleePatched then
+		return true
+	end
+	local v7 = autoBounty.RequireModule(modules and modules:FindFirstChild("WeaponData"))
+	if type(v7) ~= "table" then
+		return false
+	end
+	local n46 = 0
+
+	for _, v8 in pairs(v7) do
+		if type(v8) == "table" and tbl9[v8.WeaponType] then
+			pcall(function()
+				v8.HitboxMagnitude = hitboxMagnitude
+				v8.ValidateFrontHits = false
+			end)
+
+			n46 += 1
+		end
+	end
+
+	if n46 == 0 then
+		return false
+	end
+	local v8 = autoBounty.RequireModule(modules and modules:FindFirstChild("CombatUtil"))
+
+	if type(v8) == "table" and type(v8.CanCharacterMeleeAoe) == "function" then
+		pcall(function()
+			v8.CanCharacterMeleeAoe = function()
+				return 100
+			end
+		end)
+	end
+
+	autoBountyRuntime.MeleePatched = true
+	fn11("melee patched", n46)
+	return true
+end
+
+autoBounty.ReplaceMethod = function(arg, arg2, arg3)
+	if type(arg) ~= "table" or type(arg[arg2]) ~= "function" then
+		return false
+	end
+	local v7 = arg[arg2]
+
+	return pcall(function()
+		arg[arg2] = arg3(v7)
+	end)
+end
+
+autoBounty.PatchCooldown = function()
+	if autoBountyRuntime.CooldownPatched then
+		return true
+	end
+	local v7 = autoBounty.RequireModule(modules and modules:FindFirstChild("CombatUtil"))
+	if type(v7) ~= "table" then
+		return false
+	end
+
+	autoBounty.ReplaceMethod(v7, "CanAttack", function(arg)
+		return function(arg2, arg3, arg4)
+			if arg3 == character then
+				return true
+			end
+			return arg(arg2, arg3, arg4)
+		end
+	end)
+
+	autoBounty.ReplaceMethod(v7, "GetComboPaddingTime", function()
+		return function()
+			return 0
+		end
+	end)
+
+	autoBounty.ReplaceMethod(v7, "GetAttackCancelMultiplier", function()
+		return function()
+			return 0.01
+		end
+	end)
+
+	autoBountyRuntime.CooldownPatched = true
+	fn11("cooldown patched")
+	return true
+end
+
+autoBounty.ReleaseAttackLock = function()
+	local getupvalues_ = getupvalues or debug and debug.getupvalues
+	local setupvalue_ = setupvalue or debug and debug.setupvalue
+	if type(getupvalues_) ~= "function" or type(setupvalue_) ~= "function" then
+		return false
+	end
+	local v7 = autoBounty.GetAttackMelee()
+	if not v7 then
+		return false
+	end
+	local ok, result = pcall(getupvalues_, v7)
+	if not ok or type(result) ~= "table" then
+		return false
+	end
+
+	for k, v8 in pairs(result) do
+		if v8 == true then
+			pcall(setupvalue_, v7, k, false)
+		elseif v8 == n13 then
+			pcall(setupvalue_, v7, k, 0.01)
+		end
+	end
+
+	return true
+end
+
+autoBounty.TapCooldown = function()
+	local global = autoBountyRuntime.Global
+
+	if not global then
+		global = autoBounty.RequireModule(replicatedStorage:FindFirstChild("Global"))
+		if type(global) ~= "table" then
+			return false
+		end
+		autoBountyRuntime.Global = global
+	end
+
+	return pcall(function()
+		global.tapCooldown = 0
+	end)
+end
+
+autoBounty.NoCooldown = function()
+	if not autoBountyConfig.Settings.NoCooldown then
+		return false
+	end
+	autoBounty.PatchCooldown()
+	autoBounty.TapCooldown()
+	autoBounty.ReleaseAttackLock()
+	return true
+end
+
+autoBounty.GetAttackMelee = function()
+	if autoBountyRuntime.AttackMelee then
+		return autoBountyRuntime.AttackMelee
+	end
+	local controller = autoBountyRuntime.Controller
+
+	if not controller then
+		controller = autoBounty.RequireModule(replicatedStorage:FindFirstChild("CombatController", true))
+		if type(controller) ~= "table" or type(controller.Attack) ~= "function" then
+			return nil
+		end
+		autoBountyRuntime.Controller = controller
+	end
+
+	if type(getfenv) ~= "function" then
+		return nil
+	end
+
+	local ok, attackMelee = pcall(function()
+		return getfenv(controller.Attack).attackMelee
+	end)
+
+	if ok and type(attackMelee) == "function" then
+		autoBountyRuntime.AttackMelee = attackMelee
+		fn11("attackMelee resolved")
+		return attackMelee
+	end
+
+	return nil
+end
+
+autoBounty.Swing = function()
+	local v7 = character
+	local tool
+
+	if character then
+		tool = character:FindFirstChildOfClass("Tool")
+	else
+		tool = v7
+	end
+
+	if not tool then
+		return false
+	end
+	local v8 = autoBounty.GetAttackMelee()
+	if v8 and pcall(v8, tool) then
+		autoBountyRuntime.Hits = autoBountyRuntime.Hits + 1
+		return true
+	end
+	local controller = autoBountyRuntime.Controller
+	if not controller then
+		return false
+	end
+
+	local ok = pcall(function()
+		controller:Attack(tool, { UserInputType = Enum.UserInputType.MouseButton1 })
+	end)
+
+	if ok then
+		autoBountyRuntime.Hits = autoBountyRuntime.Hits + 1
+	end
+
+	return ok
+end
+
+autoBounty.AttackM1 = function(arg)
+	local tool = character and character:FindFirstChildOfClass("Tool")
+	local leftClickRemote = tool and tool:FindFirstChild("LeftClickRemote")
+	if not leftClickRemote or not leftClickRemote:IsA("RemoteEvent") then
+		return false
+	end
+	local position = arg and arg.Position or Vector3.new(0, -500, 0)
+
+	task.spawn(function()
+		leftClickRemote:FireServer(position, math.random(1, 4), true)
+		task.wait(0.01)
+		leftClickRemote:FireServer(false)
+	end)
+
+	return true
+end
+
+autoBounty.WantDive = function()
+	local now = os.clock()
+	if now < autoBountyRuntime.DiveUntil then
+		return true
+	end
+
+	if autoBountyRuntime.NextDive <= now then
+		autoBountyRuntime.DiveUntil = now + n23
+		autoBountyRuntime.NextDive = now + n23 + n24
+		return true
+	end
+
+	return false
+end
+
+autoBounty.GetCombatCFrame = function(arg)
+	local assemblyLinearVelocity = arg.AssemblyLinearVelocity or arg.Velocity
+	local vector3 = Vector3.new(assemblyLinearVelocity.X, 0, assemblyLinearVelocity.Z)
+	local magnitude = vector3.Magnitude
+	local vector4 = Vector3.zero
+
+	if n28 <= magnitude then
+		vector4 = vector3.Unit * math.clamp(magnitude * n27, 8, 45)
+	end
+
+	local n46 = os.clock() * n21
+	local diveUntil = autoBountyRuntime.DiveUntil
+	local flag = os.clock() < diveUntil
+	local n47 = flag and 3 or 14
+	flag = flag and 6 or 10
+	local n48 = arg.Position + vector4 + Vector3.new(math.cos(n46) * flag, n47, math.sin(n46) * flag)
+	local n49 = n48 - arg.Position
+
+	if n49.Magnitude > n20 then
+		n48 = arg.Position + n49.Unit * n20
+	end
+
+	return CFrame.new(n48, arg.Position)
+end
+
+autoBounty.Glide = function(arg)
+	local v7, v8 = autoBounty.GetAliveParts(character)
+	if not v7 then
+		return false
+	end
+	local v9 = autoBounty.ToCFrame(arg)
+	if not v9 then
+		return false
+	end
+	autoBounty.StopTween()
+	autoBounty.PrepareCharacter()
+	local now = os.clock()
+	local n46 = math.clamp(now - autoBountyRuntime.LastGlide, 0, 0.1)
+	autoBountyRuntime.LastGlide = now
+	local n47 = v9.Position - v8.Position
+	local magnitude = n47.Magnitude
+	local n48 = n22 * n46
+
+	if magnitude <= n48 or magnitude <= 0 then
+		v8.CFrame = v9
+	else
+		v8.CFrame = CFrame.new(v8.Position + n47.Unit * n48) * (v9 - v9.Position)
+	end
+
+	return true
+end
+
+autoBounty.GetInterceptCFrame = function(arg)
+	local assemblyLinearVelocity = arg.AssemblyLinearVelocity or arg.Velocity
+	local vector3 = Vector3.new(assemblyLinearVelocity.X, 0, assemblyLinearVelocity.Z)
+	local magnitude = vector3.Magnitude
+	if magnitude < n28 then
+		return arg.CFrame * cframe2
+	end
+	local position = arg.Position
+	return CFrame.new(arg.Position + vector3.Unit * math.clamp(magnitude * n27, 8, 45) + Vector3.new(0, cframe2.Y, 0), position)
+end
+
+autoBounty.Engage = function(arg, arg2, arg3)
+	local v7, v8 = autoBounty.GetAliveParts(character)
+	if not v8 then
+		return false
+	end
+
+	if n19 <= (arg2.Position - v8.Position).Magnitude then
+		autoBounty.Travel(arg2.CFrame * cframe)
+		return true
+	end
+	local v9, v10, v11, v12 = autoBounty.GetReadyWeapon()
+
+	if not v9 then
+		if arg3 and arg3.Health < n25 then
+			autoBounty.Glide(arg2.CFrame * cframe3)
+			return true
+		end
+		local v13 = autoBounty.WantDive()
+		autoBounty.Glide(autoBounty.GetCombatCFrame(arg2))
+		autoBounty.EquipWeapon("Melee")
+
+		if v13 and not autoBounty.Swing() then
+			autoBounty.AttackM1(arg2)
+		end
+
+		return true
+	end
+
+	autoBounty.TurnRace()
+	if not autoBounty.EquipWeapon(v9) then
+		fn15("equip failed", v9)
+		return false
+	end
+
+	if not v12 then
+		fn15("equipped", v9)
+		return true
+	end
+	local v13 = autoBounty.WantDive()
+	autoBounty.Glide(autoBounty.GetCombatCFrame(arg2))
+
+	if v13 then
+		autoBounty.SendKey(v10, v11)
+	end
+
+	return true
+end
+
+autoBounty.TrackFight = function(lastTargetHealth, arg)
+	local health = autoBounty.GetAliveParts(character)
+	lastTargetHealth = lastTargetHealth and lastTargetHealth.Health or 0
+	health = health and health.Health or 0
+	arg = arg and (lastTargetHealth < autoBountyRuntime.LastTargetHealth or health < autoBountyRuntime.LastOwnHealth)
+	autoBountyRuntime.LastTargetHealth = lastTargetHealth
+	autoBountyRuntime.LastOwnHealth = health
+	return arg or autoBounty.IsFighting()
+end
+
+autoBounty.HandleTargetLoss = function(arg, arg2, arg3)
+	local humanoidRootPart2 = character and character:FindFirstChild("HumanoidRootPart")
+	if not humanoidRootPart2 or not arg then
+		return false
+	end
+	local flag = (arg2.Position - humanoidRootPart2.Position).Magnitude <= n34
+
+	if autoBounty.TrackFight(arg3, flag) then
+		autoBountyRuntime.TargetClock = os.clock()
+	end
+
+	if flag then
+		if autoBounty.IsHudVisible("SafeZone") then
+			autoBounty.BlacklistTarget(arg, "safezone hud")
+			autoBounty.StopTween()
+			return true
+		end
+
+		local safe = autoBounty.CheckNotify("safe") or autoBounty.CheckNotify("player")
+
+		if safe then
+			safe:Destroy()
+			autoBounty.BlacklistTarget(arg, "escaped")
+			autoBounty.StopTween()
+			return true
+		end
+	end
+
+	local targetClock = autoBountyRuntime.TargetClock
+
+	if n29 <= os.clock() - targetClock then
+		autoBounty.BlacklistTarget(arg, "timeout, banned", math.huge)
+		autoBounty.StopTween()
+		return true
+	end
+
+	return false
+end
+
+autoBounty.SendWebhook = function(arg)
+	local webhook = autoBountyConfig.Webhook
+	if not webhook or not webhook.Enabled or not webhook.Url or webhook.Url == "" then
+		return false
+	end
+	local v7 = http_request or request
+	local request_
+
+	if v7 then
+		request_ = v7
+	else
+		request_ = syn and syn.request
+	end
+
+	if type(request_) ~= "function" then
+		return false
+	end
+	local tbl18 = {}
+	local embeds = {}
+	local tbl19 = { title = "Auto Bounty" }
+	local format = string.format
+	arg = arg and arg.Name or "?"
+	local v8 = tostring
+	local startBounty = autoBountyRuntime.StartBounty
+	tbl19.description = format("Target: **%s**\nKills: **%d**\nBounty: **%s**\nEarned: **%s**", arg, autoBountyRuntime.Kills, tostring(autoBounty.GetBounty()), v8(autoBounty.GetBounty() - startBounty))
+	tbl19.color = 2895667
+	embeds[1] = tbl19
+	tbl18.embeds = embeds
+
+	task.spawn(function()
+		pcall(request_, {
+			Url = webhook.Url,
+			Method = "POST",
+			Headers = { ["Content-Type"] = "application/json" },
+			Body = httpService:JSONEncode(tbl18),
+		})
+	end)
+
+	return true
+end
+
+autoBounty.FlyUp = function(arg)
+	local v7, v8 = autoBounty.GetAliveParts(character)
+	if not v8 then
+		return false
+	end
+
+	if v7.Sit then
+		v7.Sit = false
+	end
+
+	if arg - n7 <= v8.Position.Y then
+		return true
+	end
+	return autoBounty.Tweento(CFrame.new(v8.Position.X, arg, v8.Position.Z), 400)
+end
+
+autoBounty.HopServer = function()
+	local nextHopClock = autoBountyRuntime.NextHopClock
+	if os.clock() - nextHopClock < (autoBountyConfig.Server.HopCooldown or 15) then
+		return false
+	end
+
+	if autoBounty.InCombat() then
+		local nextCombatLog = autoBountyRuntime.NextCombatLog
+
+		if os.clock() - nextCombatLog >= n44 then
+			autoBountyRuntime.NextCombatLog = os.clock()
+			fn9("Waiting", "hop blocked, in combat")
+		end
+
+		return false
+	end
+
+	autoBountyRuntime.NextHopClock = os.clock()
+	autoBountyRuntime.Hopping = true
+	autoBounty.StopTween()
+	autoBounty.NoStun()
+	autoBounty.UpdateCamera(nil)
+	autoBounty.Notify("Auto Bounty", "Hop server")
+	local v7, v8 = autoBounty.GetAliveParts(character)
+	local n46 = (v8 and v8.Position.Y or 0) + math.random(700, 1200)
+
+	task.spawn(function()
+		local n47 = os.clock() + n40
+
+		while autoBountyRuntime.Hopping and os.clock() < n47 do
+			autoBounty.FlyUp(n46)
+			task.wait()
+		end
+
+		autoBountyRuntime.Hopping = false
+	end)
+
+	task.spawn(function()
+		autoBounty.FlyUp(n46)
+		task.wait(0.5)
+
+		if autoBounty.InCombat() then
+			fn9("Waiting", "hop aborted, in combat")
+			autoBountyRuntime.Hopping = false
+			return
+		end
+
+		local flag = false
+
+		pcall(function()
+			local serverBrowser = replicatedStorage:WaitForChild("__ServerBrowser")
+
+			for i = 1, 100 do
+				local response = serverBrowser:InvokeServer(i)
+
+				if type(response) == "table" then
+					for k, v9 in next, response, nil do
+						if k ~= jobId and type(v9) == "table" and v9.Count and v9.Count <= n39 then
+							fn9("Travel", "teleport to", k, v9.Count, "height", n46)
+							flag = true
+							serverBrowser:InvokeServer("teleport", k)
+						end
+					end
+
+					continue
+				end
+
+				break
+			end
+		end)
+
+		if not flag then
+			fn9("Warning", "hop failed, no server found")
+			autoBountyRuntime.Hopping = false
+		end
+	end)
+
+	return true
+end
+
+autoBounty.HandleNoTarget = function()
+	if autoBountyRuntime.NoTargetClock == 0 then
+		local v7, v8 = autoBounty.GetAliveParts(character)
+		autoBountyRuntime.NoTargetClock = os.clock()
+		autoBountyRuntime.IdleGoalY = v8 and v8.Position.Y + n36 or 0
+		fn9("Waiting", "no target, rising to", math.floor(autoBountyRuntime.IdleGoalY))
+		return false
+	end
+
+	autoBounty.UpdateCamera(nil)
+	autoBounty.FlyUp(autoBountyRuntime.IdleGoalY)
+	local noTargetClock = autoBountyRuntime.NoTargetClock
+	local n46 = os.clock() - noTargetClock
+	local rejects = autoBountyRuntime.Rejects
+	if (rejects.dead or 0) + (rejects.blacklist or 0) > 0 and n46 < n33 then
+		return false
+	end
+	local v7 = autoBounty.ClearBlacklist()
+
+	if v7 > 0 then
+		autoBountyRuntime.NoTargetClock = os.clock()
+		fn11("blacklist cleared", v7, "retry")
+		return false
+	end
+
+	if n46 >= (autoBountyConfig.Server.HopDelay or 5) then
+		autoBountyRuntime.NoTargetClock = 0
+		autoBounty.HopServer()
+		return true
+	end
+
+	return false
+end
+
+autoBounty.Aimbot = function()
+	if autoBountyRuntime.Hooked then
+		return false
+	end
+
+	if type(hookmetamethod) ~= "function" or type(getnamecallmethod) ~= "function" or type(newcclosure) ~= "function" then
+		fn9("Warning", "aim hook unsupported, missing executor functions")
+		return false
+	end
+	local v7 = nil
+
+	local function fn16(arg, ...)
+		local v8 = table.pack(...)
+
+		if getnamecallmethod() == "FireServer" and typeof(arg) == "Instance" then
+			local name = arg.Name
+			if name == str and autoBountyConfig.Settings.NoCooldown then
+				return v7(arg, 0)
+			end
+
+			if tbl13[name] then
+				local target = autoBountyRuntime.Target
+				target = target and target.Character
+
+				if target then
+					target = target:FindFirstChild("HumanoidRootPart") or target:FindFirstChild("HumanoidRootPart")
+				end
+
+				if target then
+					local v9 = table.pack(...)
+
+					if typeof(v9[1]) == "Vector3" then
+						v9[1] = target.Position
+						autoBountyRuntime.AimHits = autoBountyRuntime.AimHits + 1
+						return v7(arg, table.unpack(v9, 1, v9.n))
+					end
+
+					return v7(arg, table.unpack(v8, 1, v8.n))
+				end
+			end
+		end
+
+		local v9 = table.pack(...)
+		return v7(arg, table.unpack(v9, 1, v9.n))
+	end
+
+	v7 = hookmetamethod
+	v7 = v7(game, "__namecall", newcclosure(fn16))
+	autoBountyRuntime.Hooked = true
+	return true
+end
+
+autoBounty.CreateESP = function()
+	if autoBountyRuntime.ESP then
+		return true
+	end
+
+	if not Drawing or type(Drawing.new) ~= "function" then
+		fn9("Warning", "esp unavailable, no Drawing api")
+		return false
+	end
+	local line = Drawing.new("Line")
+	line.Thickness = thickness
+	line.Color = color2
+	line.Transparency = 1
+	line.Visible = false
+	local square = Drawing.new("Square")
+	square.Thickness = thickness
+	square.Color = color2
+	square.Filled = false
+	square.Transparency = 1
+	square.Visible = false
+	local text = Drawing.new("Text")
+	text.Size = size
+	text.Color = color2
+	text.Center = true
+	text.Outline = true
+	text.Visible = false
+	autoBountyRuntime.ESP = { Line = line, Box = square, Label = text }
+	return true
+end
+
+autoBounty.HideESP = function()
+	local esp = autoBountyRuntime.ESP
+	if not esp then
+		return false
+	end
+	esp.Line.Visible = false
+	esp.Box.Visible = false
+	esp.Label.Visible = false
+	return false
+end
+
+autoBounty.UpdateESP = function()
+	local esp = autoBountyRuntime.ESP
+	if not esp then
+		return false
+	end
+
+	if not autoBountyConfig.Settings.ESP then
+		return autoBounty.HideESP()
+	end
+	local target = autoBountyRuntime.Target
+	local v7, v8 = autoBounty.GetAliveParts(target and target.Character)
+	if not v7 then
+		return autoBounty.HideESP()
+	end
+	local v9, v10 = currentCamera:WorldToViewportPoint(v8.Position + vector)
+	local v11 = currentCamera:WorldToViewportPoint(v8.Position - vector2)
+	if not v10 then
+		return autoBounty.HideESP()
+	end
+	local n46 = math.abs(v9.Y - v11.Y)
+	local n47 = n46 * n45
+	local viewportSize = currentCamera.ViewportSize
+	esp.Box.Size = Vector2.new(n47, n46)
+	esp.Box.Position = Vector2.new(v9.X - n47 * 0.5, v9.Y)
+	esp.Box.Visible = true
+	esp.Line.From = Vector2.new(viewportSize.X * 0.5, viewportSize.Y)
+	esp.Line.To = Vector2.new(v9.X, v11.Y)
+	esp.Line.Visible = true
+	local v12, v13 = autoBounty.GetAliveParts(character)
+	esp.Label.Text = string.format("%s | %d studs | %d hp", target.Name, v13 and (v8.Position - v13.Position).Magnitude or 0, v7.Health)
+	esp.Label.Position = Vector2.new(v9.X, v9.Y - size - 2)
+	esp.Label.Visible = true
+	return true
+end
+
+autoBounty.StartESP = function()
+	if not autoBountyConfig.Settings.ESP then
+		return false
+	end
+	if autoBountyRuntime.ESPConnection then
+		return false
+	end
+
+	if not autoBounty.CreateESP() then
+		return false
+	end
+
+	autoBountyRuntime.ESPConnection = runService.RenderStepped:Connect(function()
+		pcall(autoBounty.UpdateESP)
+	end)
+
+	fn11("esp started")
+	return true
+end
+
+autoBounty.AntiAfk = function()
+	if autoBountyRuntime.AntiAfk then
+		return false
+	end
+
+	autoBountyRuntime.AntiAfk = localPlayer.Idled:Connect(function()
+		pcall(function()
+			local virtualUser = obj.VirtualUser
+			virtualUser:CaptureController()
+			virtualUser:ClickButton2(Vector2.new())
+		end)
+	end)
+
+	return true
+end
+
+autoBounty.ShouldStop = function()
+	local stopAtBounty = autoBountyConfig.Server.StopAtBounty
+	if type(stopAtBounty) == "number" and stopAtBounty > 0 and autoBounty.GetBounty() >= stopAtBounty then
+		autoBounty.Notify("Auto Bounty", "Reached " .. tostring(autoBounty.GetBounty()))
+		return true
+	end
+	return false
+end
+
+autoBounty.UpdateProgress = function()
+	local stopAtBounty = autoBountyConfig.Server.StopAtBounty
+	if type(stopAtBounty) ~= "number" or stopAtBounty <= 0 then
+		return false
+	end
+	return v.Progress(autoBounty.GetBounty() / stopAtBounty)
+end
+
+autoBounty.Heartbeat = function(...)
+	local nextHeartbeat = autoBountyRuntime.NextHeartbeat
+	if os.clock() - nextHeartbeat < n44 then
+		return false
+	end
+	autoBountyRuntime.NextHeartbeat = os.clock()
+	autoBounty.UpdateProgress()
+	fn10(...)
+	return true
+end
+
+autoBounty.Step = function()
+	if autoBountyRuntime.Hopping then
+		return
+	end
+
+	if autoBounty.ShouldStop() then
+		autoBounty.Stop()
+		return
+	end
+
+	if not autoBounty.GetAliveParts(character) then
+		autoBounty.StopTween()
+		autoBountyRuntime.Target = nil
+		return
+	end
+
+	autoBounty.NoStun()
+	autoBounty.BigHitbox()
+	autoBounty.NoCooldown()
+	autoBounty.EnablePvp()
+	autoBounty.EnableBuso()
+	autoBounty.ActiveKen()
+	if autoBounty.HandlePanic() then
+		autoBounty.Heartbeat("panic")
+		return
+	end
+	local v7, v8, v9 = autoBounty.GetTarget()
+
+	if not v7 then
+		local formatRejects = autoBounty.FormatRejects
+		autoBounty.Heartbeat("no target, players:", #players:GetPlayers(), "rejects:", formatRejects())
+		autoBounty.UpdateCamera(nil)
+		autoBounty.HandleNoTarget()
+		autoBounty.HopServer()
+		return
+	end
+
+	local aimHits = autoBountyRuntime.AimHits
+	autoBounty.Heartbeat(v7.Name, "lv" .. autoBounty.GetLevel(v7), math.floor((v8.Position - character.HumanoidRootPart.Position).Magnitude) .. " studs", math.floor(v9.Health) .. " hp", "aimhits", aimHits)
+	autoBountyRuntime.NoTargetClock = 0
+	autoBounty.UpdateCamera(v7.Character)
+	if autoBounty.HandleTargetLoss(v7, v8, v9) then
+		return
+	end
+	autoBounty.Engage(v7, v8, v9)
+end
+
+autoBounty.WatchEffects = function()
+	if autoBountyRuntime.EffectConnection or not v5 then
+		return false
+	end
+
+	local function fn16(descendant)
+		if not tbl16[descendant.ClassName] then
+			return
+		end
+
+		task.defer(function()
+			pcall(function()
+				descendant:Destroy()
+			end)
+		end)
+	end
+
+	for _, descendant in ipairs(v5:GetDescendants()) do
+		fn16(descendant)
+	end
+
+	autoBountyRuntime.EffectConnection = v5.DescendantAdded:Connect(fn16)
+	fn11("effect watcher on", v5:GetFullName())
+	return true
+end
+
+autoBounty.FixLag = function()
+	pcall(function()
+		for _, descendant in pairs(lighting:GetDescendants()) do
+			if descendant:IsA("Atmosphere") then
+				descendant:Destroy()
+			end
+		end
+
+		local terrain = workspace:FindFirstChildOfClass("Terrain")
+
+		if terrain then
+			terrain.WaterWaveSize = 0
+			terrain.WaterWaveSpeed = 0
+			terrain.WaterReflectance = 0
+			terrain.WaterTransparency = 1
+		end
+
+		lighting.GlobalShadows = false
+		lighting.FogStart = 9e9
+		lighting.FogEnd = 9e9
+
+		for _, descendant in ipairs(lighting:GetDescendants()) do
+			if descendant:IsA("PostEffect") then
+				descendant.Enabled = false
+			end
+		end
+
+		if sethiddenproperty then
+			sethiddenproperty(Settings, "GraphicsQualityLevel", 1)
+		end
+	end)
+
+	local function fn16(arg)
+		if arg:IsA("BasePart") then
+			arg.CastShadow = false
+			arg.Material = Enum.Material.Plastic
+			arg.Reflectance = 0
+		elseif arg:IsA("Decal") then
+			arg.Texture = ""
+			arg.Transparency = 1
+		elseif arg:IsA("ParticleEmitter") then
+			arg.Lifetime = NumberRange.new(0)
+		elseif arg:IsA("Trail") then
+			arg.Lifetime = 0
+		elseif arg:IsA("ForceField") or arg:IsA("Sparkles") or arg:IsA("Smoke") or arg:IsA("Fire") or arg:IsA("Beam") then
+			task.defer(function()
+				pcall(function()
+					arg:Destroy()
+				end)
+			end)
+		end
+	end
+
+	for i, descendant in ipairs(workspace:GetDescendants()) do
+		pcall(fn16, descendant)
+
+		if i % 5000 == 0 then
+			task.wait()
+		end
+	end
+
+	autoBounty.WatchEffects()
+end
+
+autoBounty.LockCamera = function()
+	if not autoBountyConfig.Settings.CameraLock then
+		return false
+	end
+	local target = autoBountyRuntime.Target
+	local v7, v8 = autoBounty.GetAliveParts(target and target.Character)
+	if not v7 then
+		return false
+	end
+	currentCamera.CFrame = CFrame.new(currentCamera.CFrame.Position, v8.Position)
+	return true
+end
+
+autoBounty.StartCameraLock = function()
+	if autoBountyRuntime.CameraConnection then
+		return false
+	end
+
+	autoBountyRuntime.CameraConnection = runService.RenderStepped:Connect(function()
+		pcall(autoBounty.LockCamera)
+	end)
+
+	fn11("camera lock started")
+	return true
+end
+
+autoBounty.Stop = function()
+	autoBountyConfig.Enabled = false
+	autoBountyRuntime.Active = false
+	autoBountyRuntime.Target = nil
+	autoBounty.StopTween()
+	autoBounty.UpdateCamera(nil)
+	autoBounty.HideESP()
+	fn9("Success", "stopped, kills", autoBountyRuntime.Kills, "bounty", autoBounty.GetBounty())
+	v.Complete()
+end
+
+autoBounty.Start = function()
+	if autoBountyRuntime.Active then
+		return false
+	end
+	autoBountyConfig.Enabled = true
+	autoBountyRuntime.Active = true
+	autoBountyRuntime.StartBounty = autoBounty.GetBounty()
+	autoBountyRuntime.NoTargetClock = 0
+	autoBountyRuntime.NextHopClock = os.clock()
+	v.Reset()
+	autoBounty.UpdateProgress()
+
+	if typeof(autoBountyConfig.Status.AccentColor) == "Color3" then
+		v.Theme(autoBountyConfig.Status.AccentColor)
+	end
+
+	autoBounty.AntiAfk()
+	autoBounty.WatchNotifications()
+	if autoBountyConfig.Settings.ESP then
+		autoBounty.StartESP()
+	end
+	if autoBountyConfig.Settings.FixLag then
+		autoBounty.FixLag()
+	end
+	if autoBountyConfig.Settings.CameraLock then
+		autoBounty.StartCameraLock()
+	end
+
+	if autoBountyConfig.Settings.Aimbot then
+		fn11("aim hook", autoBounty.Aimbot())
+	else
+		fn11("aim hook off, config says", tostring(autoBountyConfig.Settings.Aimbot))
+	end
+
+	autoBountyRuntime.Job = task.spawn(function()
+		autoBounty.SetTeam()
+		fn9("Success", "stage 4 - loop running")
+		autoBounty.Notify("Auto Bounty", "Started as " .. tostring(autoBountyConfig.Team))
+
+		while autoBountyRuntime.Active and autoBountyConfig.Enabled do
+			local ok, result = pcall(autoBounty.Step)
+
+			if not ok then
+				fn9("Error", "step failed:", result)
+			end
+
+			task.wait()
+		end
+
+		autoBountyRuntime.Active = false
+		fn11("loop stopped")
+	end)
+
+	fn11("stage 3 - start done")
+	return true
+end
+
+genv2.AutoBounty = autoBounty
+autoBounty.Start()
